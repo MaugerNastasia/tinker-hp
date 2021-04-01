@@ -125,12 +125,14 @@ c
       voltrial   = 20
       volmove    = 100.0_re_p
       volscale   = 'MOLECULAR'
+      virnum=.false.
+      kin_instant=.true.
 c      volscale = 'ATOMIC'
       gamma      = 1.0_ti_p
-! this variable seems to be useless
+! this variable seems to be useless (=> used for PIMD and QTB (T.Plé))
 !!$acc update device(gamma)
       gammapiston = 20.0_ti_p
-      masspiston  = 0.000200_ti_p
+      masspiston  = 100000_ti_p
       virsave     = 0.0_re_p
       viramdD     = 0.0_re_p
 !$acc update device(eta)
@@ -200,6 +202,14 @@ c
             read (string,*,err=10,end=10) masspiston
          else if (keyword(1:12) .eq. 'VIRIALTERM ') then
             use_virial=.true.
+         else if (keyword(1:7) .eq. 'VIRNUM ') then
+            virnum=.true.
+            if(ranktot.eq.0) then
+              write(*,*) 'WARNING - virial pressure',
+     &               ' computed using finite differences.'
+            endif
+         else if (keyword(1:13) .eq. 'KIN_PRES_AVG ') then
+            kin_instant=.false.
          else if (keyword(1:7) .eq. 'PLUMED ') then
             lplumed = .true.
             call getword(record,pl_input ,next)

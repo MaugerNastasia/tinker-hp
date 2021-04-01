@@ -1,0 +1,21 @@
+TODO LIST FOR PIMD IMPLEMENTATION
+
+1) BASIC IMPLEMENTATION
+
+- redefine COMM_TINKER (like COMM_BEAD in CPU implementation)
+- rename new modules to MOD_*.f
+- port baoabpi to GPU 
+    - derivs only on GPU
+    - check where are the energies (transfer to pi variables)
+    - barostat ?
+- check if mdstatpi has access to everything on CPU
+- prtdynbeads / prtxyzbeads ?
+
+2) OPTIMIZATION
+
+- can we put everything on GPU (less transfer in pushbead/initbead) ?
+- can the tasks of ranktot 0 be parallelized on GPU ? (probably yes !)
+
+3) MORE FEATURES
+
+- implement IR SPECTRA (need some QTB routines => port QTB ?)

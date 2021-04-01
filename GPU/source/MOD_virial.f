@@ -27,6 +27,8 @@ c
       real(r_p) viramdD(3,3)
 
       logical :: use_virial=.false.
+      logical :: virnum=.false.
+      logical :: kin_instant=.true.
 
 !$acc declare create(vir)
       contains
