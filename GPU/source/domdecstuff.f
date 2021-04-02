@@ -184,6 +184,7 @@ c
       if(pa.or.use_tors  ) call prmem_requestm(det  ,3,nbloc)
       if(pa.or.use_pitors) call prmem_requestm(dept ,3,nbloc)
       if(pa.or.use_strtor) call prmem_requestm(debt ,3,nbloc)
+      if(pa.or.use_angtor) call prmem_requestm(deat ,3,nbloc)
       if(pa.or.use_tortor) call prmem_requestm(dett ,3,nbloc)
 
       if(pa.or.use_smd_velconst.or.use_smd_forconst)
@@ -310,6 +311,7 @@ c
       if(pa.or.use_tors  ) call prmem_requestm(det  ,3,nbloc)
       if(pa.or.use_pitors) call prmem_requestm(dept ,3,nbloc)
       if(pa.or.use_strtor) call prmem_requestm(debt ,3,nbloc)
+      if(pa.or.use_angtor) call prmem_requestm(deat ,3,nbloc)
       if(pa.or.use_tortor) call prmem_requestm(dett ,3,nbloc)
       if(pa.or.use_smd_velconst.or.use_smd_forconst)
      &   call prmem_requestm(desmd  ,3,nbloc)
@@ -1620,6 +1622,21 @@ c
 c     get the number of subdivision along each axis for dd
 c
       call ddnumber(nprocloc,0)
+
+      ! Get decomposition dimension
+      if (nxdd.eq.1.and.nydd.eq.1) then
+         Bdecomp1d=.true.
+         Bdecomp2d=.false.
+         Bdecomp3d=.false.
+      else if (nxdd.eq.1) then
+         Bdecomp1d=.false.
+         Bdecomp2d=.true.
+         Bdecomp3d=.false.
+      else
+         Bdecomp1d=.false.
+         Bdecomp2d=.false.
+         Bdecomp3d=.true.
+      end if
 c
       nx_box = xbox/nxdd
       ny_box = ybox/nydd

@@ -100,7 +100,7 @@ c
       if (dcdio) then
         dcdfile = filename(1:leng)//'.dcd'
         call dcdfile_open(dcdfile)
-        call dcdfile_read_header
+        call dcdfile_read_header(.false.)
         call dcdfile_read_next
         call dcdfile_skip_next(0)
       else
@@ -301,6 +301,10 @@ c
       if (nebt.ne.0) then
          fstr = '('' Stretch-Torsion'',12x,'//form1//')'
          write (iout,fstr)  ebt,nebt
+      end if
+      if (neat.ne.0) then
+         fstr = '('' Angle-Torsion'',14x,'//form1//')'
+         write (iout,fstr)  eat,neat
       end if
       if (nett.ne.0) then
          fstr = '('' Torsion-Torsion'',12x,'//form1//')'

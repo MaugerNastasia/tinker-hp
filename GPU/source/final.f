@@ -119,6 +119,8 @@ c
       if (allocated(deit))  deallocate (deit)
       if (allocated(det))   deallocate (det)
       if (allocated(dept))  deallocate (dept)
+      if (allocated(deat))  deallocate (deat)
+      if (allocated(deat))  deallocate (deat)
       if (allocated(debt))  deallocate (debt)
       if (allocated(dett))  deallocate (dett)
       if (allocated(dev))   deallocate (dev)
