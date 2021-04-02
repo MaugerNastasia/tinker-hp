@@ -14,6 +14,12 @@ c     "eangtor3" calculates the angle-torsion potential energy;
 c     also partitions the energy terms among the atoms
 c
 c
+#include "tinker_precision.h"
+      module eangtor3_inl
+      contains
+#include "image.f.inc"
+      end module
+
       subroutine eangtor3
       use action
       use analyz
@@ -23,12 +29,14 @@ c
       use atmlst
       use atoms
       use bound
-      use domdec
+      use domdec   ,only: loc
+      use eangtor3_inl
       use energi
       use group
       use inform
       use iounit
       use math
+      use tinheader,only: ti_p
       use torpot
       use tors
       use usage
@@ -36,38 +44,46 @@ c
       integer i,k,iangtor,iiangtor
       integer ia,ib,ic,id
       integer ialoc,ibloc,icloc,idloc
-      real*8 e,e1,e2
-      real*8 rcb,fgrp
-      real*8 rt2,ru2,rtru
-      real*8 rba2,rcb2,rdc2
-      real*8 dot,dt,tangle
-      real*8 xt,yt,zt
-      real*8 xu,yu,zu
-      real*8 xtu,ytu,ztu
-      real*8 v1,v2,v3
-      real*8 c1,c2,c3
-      real*8 s1,s2,s3
-      real*8 sine,cosine
-      real*8 sine2,cosine2
-      real*8 sine3,cosine3
-      real*8 phi1,phi2,phi3
-      real*8 angle1,cosang
-      real*8 xia,yia,zia
-      real*8 xib,yib,zib
-      real*8 xic,yic,zic
-      real*8 xid,yid,zid
-      real*8 xba,yba,zba
-      real*8 xcb,ycb,zcb
-      real*8 xdc,ydc,zdc
+      real(t_p) e,e1,e2
+      real(t_p) rcb,fgrp
+      real(t_p) rt2,ru2,rtru
+      real(t_p) rba2,rcb2,rdc2
+      real(t_p) dot,dt,tangle
+      real(t_p) xt,yt,zt
+      real(t_p) xu,yu,zu
+      real(t_p) xtu,ytu,ztu
+      real(t_p) v1,v2,v3
+      real(t_p) c1,c2,c3
+      real(t_p) s1,s2,s3
+      real(t_p) sine,cosine
+      real(t_p) sine2,cosine2
+      real(t_p) sine3,cosine3
+      real(t_p) phi1,phi2,phi3
+      real(t_p) angle1,cosang
+      real(t_p) xia,yia,zia
+      real(t_p) xib,yib,zib
+      real(t_p) xic,yic,zic
+      real(t_p) xid,yid,zid
+      real(t_p) xba,yba,zba
+      real(t_p) xcb,ycb,zcb
+      real(t_p) xdc,ydc,zdc
       logical proceed
       logical header,huge
 c
+      if (deb_Path) print*, "eangtor3"
+#ifdef USE_NVSHMEM_CUDA
+      ! TODO Remove this check
+      ! Implement NVSHMEM Access to anat & itors, tors[123]
+      print*, '  FATAL ERROR  '
+      print*, 'NVSHMEM feature not implemented inside eangtor3'
+      call fatal
+#endif
 c
 c     zero out the energy due to extra potential terms
 c
       neat = 0
-      eat = 0.0d0
-      aet = 0d0
+      eat  = 0.0_re_p
+      aet  = 0.0_ti_p
 c
 c     print header information if debug output was requested
 c
@@ -83,6 +99,9 @@ c
 c
 c     calculate the angle-torsion interaction energy term
 c
+!$acc parallel loop async reduction(+:eat,neat)
+!$acc&         present(eat,aeat,angtorglob,iat,anat
+!$acc&     ,itors,tors1,tors2,tors3,x,y,z,use,kant,loc)
       do iangtor = 1, nangtorloc
          iiangtor = angtorglob(iangtor)
          i = iat(1,iiangtor)
@@ -126,14 +145,14 @@ c
             ydc = yid - yic
             zdc = zid - zic
             if (use_polymer) then
-               call image (xba,yba,zba)
-               call image (xcb,ycb,zcb)
-               call image (xdc,ydc,zdc)
+               call image_inl (xba,yba,zba)
+               call image_inl (xcb,ycb,zcb)
+               call image_inl (xdc,ydc,zdc)
             end if
             rba2 = xba*xba + yba*yba + zba*zba
             rcb2 = xcb*xcb + ycb*ycb + zcb*zcb
             rdc2 = xdc*xdc + ydc*ydc + zdc*zdc
-            if (min(rba2,rcb2,rdc2) .ne. 0.0d0) then
+            if (min(rba2,rcb2,rdc2) .ne. 0.0_ti_p) then
                xt = yba*zcb - ycb*zba
                yt = zba*xcb - zcb*xba
                zt = xba*ycb - xcb*yba
@@ -144,9 +163,9 @@ c
                ytu = zt*xu - zu*xt
                ztu = xt*yu - xu*yt
                rt2 = xt*xt + yt*yt + zt*zt
-               rt2 = max(rt2,0.000001d0)
+               rt2 = max(rt2,0.000001_ti_p)
                ru2 = xu*xu + yu*yu + zu*zu
-               ru2 = max(ru2,0.000001d0)
+               ru2 = max(ru2,0.000001_ti_p)
                rtru = sqrt(rt2*ru2)
                rcb = sqrt(rcb2)
                cosine = (xt*xu + yt*yu + zt*zu) / rtru
@@ -163,12 +182,12 @@ c
                c3 = tors3(3,i)
                s3 = tors3(4,i)
                cosine2 = cosine*cosine - sine*sine
-               sine2 = 2.0d0 * cosine * sine
+               sine2 = 2.0_ti_p * cosine * sine
                cosine3 = cosine*cosine2 - sine*sine2
                sine3 = cosine*sine2 + sine*cosine2
-               phi1 = 1.0d0 + (cosine*c1 + sine*s1)
-               phi2 = 1.0d0 + (cosine2*c2 + sine2*s2)
-               phi3 = 1.0d0 + (cosine3*c3 + sine3*s3)
+               phi1 = 1.0_ti_p + (cosine*c1 + sine*s1)
+               phi2 = 1.0_ti_p + (cosine2*c2 + sine2*s2)
+               phi3 = 1.0_ti_p + (cosine3*c3 + sine3*s3)
 c
 c     get the angle-torsion values for the first angle
 c
@@ -189,8 +208,8 @@ c
                v3 = kant(6,iiangtor)
                k = iat(3,iiangtor)
                dot = xcb*xdc + ycb*ydc + zcb*zdc
-               cosang = -dot / sqrt(rcb2*rdc2)
-               angle1 = radian * acos(cosang)
+               cosang = acos(-dot / sqrt(rcb2*rdc2))
+               angle1 = radian * (cosang)
                dt = angle1 - anat(k)
                e2 = atorunit * dt * (v1*phi1 + v2*phi2 + v3*phi3)
 cc
@@ -204,12 +223,17 @@ c
 c     increment the total angle-torsion energy
 c
                neat = neat + 1
-               e = e1 + e2
-               eat = eat + e
-               aeat(ialoc) = aeat(ialoc) + e1/3.0d0
-               aeat(ibloc) = aeat(ibloc) + e/3.0d0
-               aeat(icloc) = aeat(icloc) + e/3.0d0
-               aeat(idloc) = aeat(idloc) + e2/3.0d0
+               e    = e1 + e2
+               eat  = eat + e
+!$acc atomic
+               aeat(ialoc) = aeat(ialoc) + e1/3.0_ti_p
+!$acc atomic
+               aeat(ibloc) = aeat(ibloc) + e/3.0_ti_p
+!$acc atomic
+               aeat(icloc) = aeat(icloc) + e/3.0_ti_p
+!$acc atomic
+               aeat(idloc) = aeat(idloc) + e2/3.0_ti_p
+#ifndef _OPENACC
 c
 c     print a message if the energy of this interaction is large
 c
@@ -227,9 +251,9 @@ c
      &                             name(ic),id,name(id),tangle,e
    30             format (' AngTors',3x,4(i7,'-',a3),f11.4,f12.4)
                end if
+#endif
             end if
          end if
       end do
-c
-      return
+!$acc update host(aeat) async
       end

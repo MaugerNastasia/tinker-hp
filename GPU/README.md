@@ -26,13 +26,16 @@ There is no difference between the use of Tinker-HP and Tinker-HP (GPU version) 
    - Accelerate Molecular Dynamics : aMD and GaMD Simulations
    - Steered Molecular Dynamics (SMD)
    - Orthogonal and Octahedron PBC Box Shapes (the latest to be used only on a single MPI process for now)
-   - Plumed support (to appear : 12/2020)
+   - Plumed support available (updated : 03/2021)
    - More to come
+
+   For more detailed informations on how to use the application, see section V to VIII of the readme of the CPU 1.2 version: https://github.com/TinkerTools/tinker-hp/blob/master/v1.2/Readme_v1.2.pdf
+   Beware that not all the features available on CPU are available on GPU (see above, for example the TCG solver is only available on CPU as is the Langevin Piston barostat).
    
    <B>If you use the code please cite :</B>
    
    Tinker-HP : Accelerating Molecular Dynamics Simulations of Large Complex Systems with Advanced Point Dipole Polarizable Force Fields using GPUs and Multi-GPUs systems.
-O. Adjoua,  L. Lagardère, L.-H. Jolly, Arnaud Durocher, Z. Wang, T. Very, I. Dupays, T. Jaffrelot Inizan, F. Célerse, P. Ren, J. Ponder, J-P. Piquemal, ArXiv, 2020, 2011.01207 (Open Access) https://arxiv.org/abs/2011.01207  
+O. Adjoua,  L. Lagardère, L.-H. Jolly, Arnaud Durocher, Z. Wang, T. Very, I. Dupays, T. Jaffrelot Inizan, F. Célerse, P. Ren, J. Ponder, J-P. Piquemal, J. Chem. Theory. Comput., 2021, XX, XX, online (Open Access) https://doi.org/10.1021/acs.jctc.0c01164
    
    and 
    

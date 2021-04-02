@@ -58,15 +58,18 @@ c
       if (allocated(precdir_recep)) deallocate(precdir_recep) 
       if (allocated(precdir_send)) deallocate(precdir_send)
       if (allocated(precdir_recep1)) deallocate(precdir_recep1)
+      if (allocated(precdir_recep2)) deallocate(precdir_recep2)
+      if (allocated(precdir_recep3)) deallocate(precdir_recep3)
       if (allocated(precdir_send1)) deallocate(precdir_send1)
+      if (allocated(precdir_send2)) deallocate(precdir_send2)
+      if (allocated(precdir_send3)) deallocate(precdir_send3)
+      if (allocated(ptorque_recep)) deallocate(ptorque_recep)
       if (allocated(ptorque_recep)) deallocate(ptorque_recep)
       if (allocated(ptorqueshort_recep)) deallocate(ptorqueshort_recep)
       if (allocated(ptorque_send)) deallocate(ptorque_send)
       if (allocated(ptorqueshort_send)) deallocate(ptorqueshort_send) 
       if (allocated(globrec)) deallocate(globrec)
       if (allocated(locrec)) deallocate(locrec)
-      if (allocated(globrec1)) deallocate(globrec1)
-      if (allocated(locrec1)) deallocate(locrec1)
       if (allocated(bufbegrec)) deallocate(bufbegrec)
       if (allocated(bufbegpole)) deallocate(bufbegpole)
       if (allocated(bufbeg)) deallocate(bufbeg)
@@ -88,8 +91,6 @@ c
         allocate (loc(n))
         allocate (globrec(n))
         allocate (locrec(n))
-        allocate (globrec1(n))
-        allocate (locrec1(n))
         allocate (repart(n))
         allocate (domlen(nproc))
         allocate (domlenpole(nproc))
@@ -114,6 +115,10 @@ c
         allocate(precdir_send(nproc))
         allocate(precdir_recep1(nproc))
         allocate(precdir_send1(nproc))
+        allocate(precdir_recep2(nproc))
+        allocate(precdir_send2(nproc))
+        allocate(precdir_recep3(nproc))
+        allocate(precdir_send3(nproc))
         allocate(bufbegpole(nproc))
         allocate(bufbeg(nproc))
         allocate(bufbegrec(nproc))
@@ -182,14 +187,16 @@ c
         allocate(precdir_send(nproc))
         allocate(precdir_recep1(nproc))
         allocate(precdir_send1(nproc))
+        allocate(precdir_recep2(nproc))
+        allocate(precdir_send2(nproc))
+        allocate(precdir_recep3(nproc))
+        allocate(precdir_send3(nproc))
         allocate(ptorque_recep(nproc))
         allocate(ptorqueshort_recep(nproc))
         allocate(ptorque_send(nproc))
         allocate(ptorqueshort_send(nproc))
         allocate (globrec(n))
         allocate (locrec(n))
-        allocate (globrec1(n))
-        allocate (locrec1(n))
         allocate (bufbegrec(nproc))
         allocate (bufbegpole(nproc))
         allocate (bufbeg(nproc))
@@ -210,13 +217,13 @@ c
       allocate (desum(3,nbloc))
       desum = 0d0
       if (allocated(decrec)) deallocate (decrec)
-      allocate (decrec(3,nblocrec))
+      allocate (decrec(3,nlocrec2))
       decrec = 0d0
       if (allocated(demrec)) deallocate (demrec)
-      allocate (demrec(3,nblocrec))
+      allocate (demrec(3,nlocrec2))
       demrec = 0d0
       if (allocated(deprec)) deallocate (deprec)
-      allocate (deprec(3,nblocrec))
+      allocate (deprec(3,nlocrec2))
       deprec = 0d0
 c
       if (allocated(deb)) deallocate (deb)
@@ -307,11 +314,11 @@ c
       if (allocated(dett)) deallocate (dett)
       allocate (dett(3,nbloc))
       if (allocated(decrec)) deallocate (decrec)
-      allocate (decrec(3,nblocrec))
+      allocate (decrec(3,nlocrec2))
       if (allocated(demrec)) deallocate (demrec)
-      allocate (demrec(3,nblocrec))
+      allocate (demrec(3,nlocrec2))
       if (allocated(deprec)) deallocate (deprec)
-      allocate (deprec(3,nblocrec))
+      allocate (deprec(3,nlocrec2))
       if (allocated(debond)) deallocate (debond)
       allocate (debond(3,nbloc))
 c
@@ -342,18 +349,53 @@ c
 c     subroutine ddnumber : get the number of subdivision along each axis for
 c     3d spatial decomposition
 c
-      subroutine ddnumber(num,nx,ny,nz,istep)
+      subroutine ddnumber(num,istep)
       use boxes
       use domdec
       use inform
       use iounit
+      use keys
       implicit none
       integer num,istep
       integer key(3),list2(3)
       integer, allocatable :: d(:)
       real*8 list1(3)
-      integer nx,ny,nz,n1,n2,n3,i,res
+      integer n1,n2,n3,i,res,next
+      character*20 keyword
+      character*240 record
+      character*240 string
  10   format('Nx = ',I5,2x,'Ny = ',I5,2x,'Nz = ',I5,2x)
+ 11   format('User defined 3D decompostion ','Nx = ',I5,2x,
+     $    'Ny = ',I5,2x,'Nz = ',I5,2x)
+ 12   format('User defined 3D decomposition not compatible with number',
+     $    ' of cores ','Nx*Ny*Nz = ',I5,2x,'number of procs = ',I5,2x)
+ 13   format('The program will impose the 3D decomposition')
+c
+c
+c     check for keywords containing domain decomposition parameters
+c
+      do i = 1, nkey
+         next = 1
+         record = keyline(i)
+         call gettext (record,keyword,next)
+         call upcase (keyword)
+         string = record(next:240)
+         if (keyword(1:9) .eq. 'DECOMP3D ') then
+           read (string,*,err=20,end=20)  nxdd,nydd,nzdd
+ 20        continue
+           if (nxdd*nydd*nzdd.eq.nproc) then
+             if (istep.eq.0.and.verbose) then
+               if (rank.eq.0) write(iout,11) nxdd,nydd,nzdd
+             end if
+             return
+           else
+             if (rank.eq.0) then
+               write(iout,12) nxdd*nydd*nzdd,nproc
+               write(iout,13) 
+             end if
+           end if
+         end if
+      end do
 c
       allocate (d(num))
       d = 0
@@ -371,48 +413,48 @@ c
       i = i-1
       if (i.eq.1) then
         if (key(3).eq.1) then
-          nx = num
-          ny = 1
-          nz = 1
+          nxdd = num
+          nydd = 1
+          nzdd = 1
         else if (key(3).eq.2) then
-          nx = 1
-          ny = num
-          nz = 1
+          nxdd = 1
+          nydd = num
+          nzdd = 1
         else
-          nx = 1
-          ny = 1
-          nz = num
+          nxdd = 1
+          nydd = 1
+          nzdd = num
         end if
       else if (i.eq.2) then
         if (key(3).eq.1) then
           if (key(2).eq.2) then
-            nx = d(2)
-            ny = d(1)
-            nz = 1
+            nxdd = d(2)
+            nydd = d(1)
+            nzdd = 1
           else
-            nx = d(2)
-            ny = 1
-            nz = d(1)
+            nxdd = d(2)
+            nydd = 1
+            nzdd = d(1)
           end if
         else if (key(3).eq.2) then
           if (key(2).eq.1) then
-            nx = d(1)
-            ny = d(2)
-            nz = 1
+            nxdd = d(1)
+            nydd = d(2)
+            nzdd = 1
           else
-            nx = 1
-            ny = d(2)
-            nz = d(1)
+            nxdd = 1
+            nydd = d(2)
+            nzdd = d(1)
           end if
         else
           if (key(3).eq.1) then
-            nx = d(1)
-            ny = 1
-            nz = d(2)
+            nxdd = d(1)
+            nydd = 1
+            nzdd = d(2)
           else
-            nx = 1
-            ny = d(1)
-            nz = d(2)
+            nxdd = 1
+            nydd = d(1)
+            nzdd = d(2)
           end if
         end if
       else
@@ -420,16 +462,16 @@ c
         n1 = floor(num**(1.0/3.0))
         do i = 0, n1-2
           res = mod(num,n1-i)
-          if (res.eq.0) goto 20
+          if (res.eq.0) goto 30
         end do
- 20     continue
+ 30     continue
         n1 = n1-i
         n2 = floor((num/n1)**(1.0/2.0))
         do i = 0, n2-2
           res = mod(num/n1,n2-i)
-          if (res.eq.0) goto 30
+          if (res.eq.0) goto 40
         end do
- 30     continue
+ 40     continue
         n2 = n2 - i
         n3 = num/(n1*n2)
         list2(1) = n1
@@ -442,19 +484,19 @@ c
 c      try dividing first by a smaller number
 c
           n1 = floor(num**(1.0/3.0)) - 1
-          if (n1.eq.0) goto 60
+          if (n1.eq.0) goto 70
           do i = 0, n1-2
             res = mod(num,n1-i)
-            if (res.eq.0) goto 40
+            if (res.eq.0) goto 50
           end do
- 40       continue
+ 50       continue
           n1 = n1-i
           n2 = floor((num/n1)**(1.0/2.0))
           do i = 0, n2-2
             res = mod(num/n1,n2-i)
-            if (res.eq.0) goto 50
+            if (res.eq.0) goto 60
           end do
- 50       continue
+ 60       continue
           n2 = n2 - i
           n3 = num/(n1*n2)
           list2(1) = n1
@@ -463,41 +505,41 @@ c
           call sort(3,list2)
         end if
 c
- 60     if (key(3).eq.1) then
+ 70     if (key(3).eq.1) then
           if (key(2).eq.2) then
-            nx = list2(3)
-            ny = list2(2)
-            nz = list2(1)
+            nxdd = list2(3)
+            nydd = list2(2)
+            nzdd = list2(1)
           else
-            nx = list2(3)
-            ny = list2(1)
-            nz = list2(2)
+            nxdd = list2(3)
+            nydd = list2(1)
+            nzdd = list2(2)
           end if
         else if (key(3).eq.2) then
           if (key(2).eq.1) then
-            nx = list2(2)
-            ny = list2(3)
-            nz = list2(1)
+            nxdd = list2(2)
+            nydd = list2(3)
+            nzdd = list2(1)
           else
-            nx = list2(1)
-            ny = list2(3)
-            nz = list2(2)
+            nxdd = list2(1)
+            nydd = list2(3)
+            nzdd = list2(2)
           end if
         else
           if (key(2).eq.1) then
-            nx = list2(2)
-            ny = list2(1)
-            nz = list2(3)
+            nxdd = list2(2)
+            nydd = list2(1)
+            nzdd = list2(3)
           else
-            nx = list2(1)
-            ny = list2(2)
-            nz = list2(3)
+            nxdd = list2(1)
+            nydd = list2(2)
+            nzdd = list2(3)
           end if
         end if
       end if
       if (istep.eq.0.and.verbose) then
         if (rank.eq.0) write(iout,*) '3D Domain Decomposition'
-        if (rank.eq.0) write(iout,10) nx,ny,nz
+        if (rank.eq.0) write(iout,10) nxdd,nydd,nzdd
       end if
       deallocate (d)
       return
@@ -1160,7 +1202,7 @@ c
       use potent
       use mpi
       implicit none
-      integer nx, ny, nz, i,j,k
+      integer i,j,k
       integer nprocloc,rankloc,iproc,iproc1
       real*8 xr,yr,zr
       real*8 dist
@@ -1279,30 +1321,30 @@ c
 c
 c     get the number of subdivision along each axis for dd
 c
-      call ddnumber(nprocloc,nx,ny,nz,0)
+      call ddnumber(nprocloc,0)
 c
-      nx_box = xbox/nx
-      ny_box = ybox/ny
-      nz_box = zbox/nz
-      do i = 0, nx-1
-        xbegproctemp(i+1) = -xcell2 + i*nx_box
-        xendproctemp(i+1) = -xcell2 + (i+1)*nx_box
+      nx_box = xbox/nxdd
+      ny_box = ybox/nydd
+      nz_box = zbox/nzdd
+      do i = 0, nxdd-1
+        xbegproctemp(i+1) = -xbox2 + i*nx_box
+        xendproctemp(i+1) = -xbox2 + (i+1)*nx_box
       end do
-      do i = 0, ny-1
-        ybegproctemp(i+1) = -ycell2 + i*ny_box
-        yendproctemp(i+1) = -ycell2 + (i+1)*ny_box
+      do i = 0, nydd-1
+        ybegproctemp(i+1) = -ybox2 + i*ny_box
+        yendproctemp(i+1) = -ybox2 + (i+1)*ny_box
       end do
-      do i = 0, nz-1
-        zbegproctemp(i+1) = -zcell2 + i*nz_box
-        zendproctemp(i+1) = -zcell2 + (i+1)*nz_box
+      do i = 0, nzdd-1
+        zbegproctemp(i+1) = -zbox2 + i*nz_box
+        zendproctemp(i+1) = -zbox2 + (i+1)*nz_box
       end do
 c
 c     assign processes
 c
-      do k = 1, nz
-        do j = 1, ny
-          do i = 1, nx
-              iproc = (k-1)*ny*nx+(j-1)*nx+i
+      do k = 1, nzdd
+        do j = 1, nydd
+          do i = 1, nxdd
+              iproc = (k-1)*nydd*nxdd+(j-1)*nxdd+i
               xbegproc(iproc) = xbegproctemp(i)
               xendproc(iproc) = xendproctemp(i)
               ybegproc(iproc) = ybegproctemp(j)
@@ -1321,9 +1363,9 @@ c
         yr = y(i)
         zr = z(i)
         call image(xr,yr,zr)
-        if (abs(xr-xcell2).lt.eps1) xr = xr-eps2
-        if (abs(yr-ycell2).lt.eps1) yr = yr-eps2
-        if (abs(zr-zcell2).lt.eps1) zr = zr-eps2
+        if (abs(xr-xbox2).lt.eps1) xr = xr-eps2
+        if (abs(yr-ybox2).lt.eps1) yr = yr-eps2
+        if (abs(zr-zbox2).lt.eps1) zr = zr-eps2
         do iproc = 0, nprocloc-1
           if ((zr.ge.zbegproc(iproc+1)).and.
      $      (zr.lt.zendproc(iproc+1)).and.(yr.ge.ybegproc(iproc+1))
@@ -1339,10 +1381,10 @@ c     iterative procedure to change the size of domains for load balancing
 c
 c   get neighbouring processes
 c
-      do k = 1, nz
-        do j = 1, ny
-          do i = 1, nx
-            iproc = (k-1)*ny*nx+(j-1)*nx+i
+      do k = 1, nzdd
+        do j = 1, nydd
+          do i = 1, nxdd
+            iproc = (k-1)*nydd*nxdd+(j-1)*nxdd+i
             numneig = 0
             filledproc = 0
             filledproc(iproc) = 1
@@ -1354,13 +1396,13 @@ c
                   temp_x = p+i
                   temp_y = q+j-1
                   temp_z = r+k-1
-                  if ((i.eq.1).and.(p.eq.-1)) temp_x = nx
-                  if ((i.eq.nx).and.(p.eq.1)) temp_x = 1
-                  if ((j.eq.1).and.(q.eq.-1)) temp_y = ny-1
-                  if ((j.eq.ny).and.(q.eq.1)) temp_y = 0
-                  if ((k.eq.1).and.(r.eq.-1)) temp_z = nz-1
-                  if ((k.eq.nz).and.(r.eq.1)) temp_z = 0
-                  tempproc = temp_z*ny*nx+temp_y*nx+
+                  if ((i.eq.1).and.(p.eq.-1)) temp_x = nxdd
+                  if ((i.eq.nxdd).and.(p.eq.1)) temp_x = 1
+                  if ((j.eq.1).and.(q.eq.-1)) temp_y = nydd-1
+                  if ((j.eq.nydd).and.(q.eq.1)) temp_y = 0
+                  if ((k.eq.1).and.(r.eq.-1)) temp_z = nzdd-1
+                  if ((k.eq.nzdd).and.(r.eq.1)) temp_z = 0
+                  tempproc = temp_z*nydd*nxdd+temp_y*nxdd+
      $              temp_x
                   if (filledproc(tempproc).eq.1) goto 10
                   filledproc(tempproc) = 1
@@ -1374,63 +1416,6 @@ c
           end do
         end do
       end do
-cc
-cc     warning bug in iterative load balancing
-cc
-cc
-cc     change size with neighbors
-cc
-c      exchgsizex = nx_box/20
-c      nitmax = 0!3
-c      ndiff  = n/(20*nprocloc)
-cc
-c      do it = 1, nitmax
-c        do iproc = 1, nprocloc
-c          x2 = xendproc(iproc)
-c          y1 = ybegproc(iproc)
-c          z1 = zbegproc(iproc)
-cc
-cc    check neighbors
-cc
-c          do i = 1, numneigproc(iproc)
-c            iproc1 = neigproc(i,iproc)
-c            x3 = xbegproc(iproc1)
-c            y3 = ybegproc(iproc1)
-c            z3 = zbegproc(iproc1)
-cc
-c            if ((x2.eq.x3).and.(y1.eq.y3).and.(z1.eq.z3)) then
-c              if ((domlen(iproc1).ge.domlen(iproc)+ndiff)) then
-c                xendproc(iproc)   = xendproc(iproc) +
-c     $            exchgsizex
-c                xbegproc(iproc1)   = xbegproc(iproc1) + exchgsizex
-c              end if
-c            end if
-c          end do
-c        end do
-cc
-cc     count number of particules per domain
-cc
-c        domlen = 0
-c        do i = 1, n
-c          xr = x(i)
-c          yr = y(i)
-c          zr = z(i)
-c          call image(xr,yr,zr)
-c          if (abs(xr-xcell2).lt.eps1) xr = xr-eps2
-c          if (abs(yr-ycell2).lt.eps1) yr = yr-eps2
-c          if (abs(zr-zcell2).lt.eps1) zr = zr-eps2
-c          do iproc = 0, nprocloc-1
-c            if ((zr.ge.zbegproc(iproc+1)).and.
-c     $        (zr.lt.zendproc(iproc+1)).and.(yr.ge.ybegproc(iproc+1))
-c     $        .and.(yr.lt.yendproc(iproc+1))
-c     $        .and.(xr.ge.xbegproc(iproc+1))
-c     $        .and.(xr.lt.xendproc(iproc+1))) then
-c               repart(i) = iproc
-c              domlen(repart(i)+1) = domlen(repart(i)+1) + 1
-c            end if
-c          end do
-c        end do
-c      end do
 c
       if ((use_pmecore).and.(rank.le.ndir-1)) then
         nloc = domlen(rankloc+1)

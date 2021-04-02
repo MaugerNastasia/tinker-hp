@@ -102,6 +102,15 @@ c     parameter(rec_queue=0)
       end interface
 
       interface
+      function acc_get_cuda_stream_c( async ) result(queue)
+     &     bind(C,name='acc_get_cuda_stream')
+      import c_int
+      integer(c_int),value:: async
+      integer(c_int),intent(out):: queue
+      end function
+      end interface
+
+      interface
         subroutine acc_free_bc(ptr) bind(C,name='acc_free')
         import C_PTR
         type(C_PTR),value ::ptr
@@ -689,43 +698,89 @@ c
       subroutine bind_gpu
       character(len=6) :: local_rank_env
       integer          :: local_rank_env_status, local_rank
+      integer device_type
 
       !Initialisation OpenAcc
-
-      ! Récupération du rang local du processus via la variable d'environnement
-      ! positionnée par Slurm, l'utilisation de MPI_Comm_rank n'étant pas encore
-      ! possible puisque cette routine est utilisée AVANT l'initialisation de MPI
-      call get_environment_variable(name="SLURM_LOCALID", 
+      call get_environment_variable(name="PGI_ACC_DEVICE_NUM",
      &     value=local_rank_env, status=local_rank_env_status)
-     
+      if (local_rank_env_status == 0) return
+
+      call get_environment_variable(name="ACC_DEVICE_NUM",
+     &     value=local_rank_env, status=local_rank_env_status)
+      if (local_rank_env_status == 0) return
+
+      call get_environment_variable(name="ACC_DEVICE_HOST_RANK",
+     &     value=local_rank_env, status=local_rank_env_status)
+      if (local_rank_env_status == 0) return
+
+      ! Look for CUDA environment
+      call get_environment_variable(name="CUDA_VISIBLE_DEVICE",
+     &     value=local_rank_env, status=local_rank_env_status)
       if (local_rank_env_status == 0) then
          read(local_rank_env, *) local_rank
-         call get_environment_variable(name="PGI_ACC_DEVICE_NUM",
-     &        value=local_rank_env, status=local_rank_env_status)
-         if (local_rank_env_status == 0)
-     &      read(local_rank_env, *) local_rank
-
-         ! Definition du GPU a utiliser via OpenACC
-         call acc_set_device_num(local_rank, acc_get_device_type())
-         devicenum=local_rank
-      else
- 34      format ( "Warning : Could not bind GPU device before MPI_Init",
-     &            "(SLURM_LOCALID not set).",/,
-     &            "          Will not work with PSM2!" )
-         write(0,34)
+         goto 100
       end if
-      end subroutine bind_gpu     
+
+      ! Recuperation du rang local du processus via la variable d'environnement
+      ! positionnee par Slurm, l'utilisation de MPI_Comm_rank n'etant pas encore
+      ! possible puisque cette routine est utilisee avant l'initialisation de MPI
+      call get_environment_variable(name="SLURM_LOCALID",
+     &     value=local_rank_env, status=local_rank_env_status)
+      if (local_rank_env_status == 0) then
+         read(local_rank_env, *) local_rank
+         !if (local_rank.eq.0) print*,'SLURM detected'
+         goto 100
+      end if
+
+      ! OpenMPI
+      call get_environment_variable(name="OMPI_COMM_WORLD_LOCAL_RANK",
+     &     value=local_rank_env, status=local_rank_env_status)
+      if (local_rank_env_status == 0) then
+         read(local_rank_env, *) local_rank
+         !if (local_rank.eq.0) print*,'OpenMPI detected'
+         goto 100
+      end if
+
+      ! Intel MPI
+      call get_environment_variable(name="MPI_LOCALRANKID",
+     &     value=local_rank_env, status=local_rank_env_status)
+      if (local_rank_env_status == 0) then
+         read(local_rank_env, *) local_rank
+         !if (local_rank.eq.0) print*,'Intel MPI detected'
+         goto 100
+      end if
+
+ 34   format( "Warning : Could not bind GPU device before MPI_Init",
+     &    ,/, "          Switched to default binding procedure")
+      write(0,34)
+      return
+
+ 100  continue
+      ! Look for device ID to bind with using OpenACC
+
+      device_type = acc_get_device_type()
+      ngpus = acc_get_num_devices(device_type)
+
+      ! Circle on total number of device present on the host
+      ! to prevent errors from `acc_set_device_num`
+      if (local_rank.ge.ngpus) local_rank = mod(local_rank,ngpus)
+
+      ! Bind to device ID local_rank
+      call acc_set_device_num( local_rank,device_type )
+      devicenum=local_rank
+      end subroutine bind_gpu
 c
 c     Initiate device parameters
 c
       subroutine selectDevice
       implicit none
       integer ::i,cuda_success=0
-      character*64 value,value1
+      character*64 value,value1,value2
       character*22 name
-      integer ::length,length1,status,status1,device_type
-      integer ::hostnm,getpid
-      integer ::device_start
+      integer length,length1,length2,status,status1,status2
+      integer device_type
+      integer hostnm,getpid
+      integer device_start
 
 c
 c     Query number of device 
@@ -735,17 +790,22 @@ c
       if (devicenum==-1) then
          device_type = acc_get_device_type()
          device_start= 0
-         call get_environment_variable('PGI_ACC_DEVICE_NUM',value,
+         call get_environment_variable('ACC_DEVICE_NUM',value,
      &                                  length,status)
-         call get_environment_variable('PGI_ACC_DEVICE_START',value1,
+         call get_environment_variable('PGI_ACC_DEVICE_NUM',value1,
      &                                  length1,status1)
-         if (status.eq.0) then
+         call get_environment_variable('ACC_DEVICE_HOST_RANK',value2,
+     &                                  length2,status2)
+         if (status1.eq.0) then
+            ngpus = 1
+            read (value1,'(i)') devicenum
+         else if (status.eq.0) then
             ngpus = 1
             read (value,'(i)') devicenum
          else
-            if (status1.eq.0) read(value1,*) device_start
+            if (status2.eq.0) read(value2,*) device_start
             ngpus     = acc_get_num_devices(device_type)
-            devicenum = device_start + mod(hostrank,ngpus)
+            devicenum = mod( device_start+hostrank,ngpus )
          end if
 
          call acc_set_device_num(devicenum, device_type)
@@ -789,6 +849,14 @@ c
       if (status.eq.0) then
          read(value,*) int_val
          if (int_val.gt.0) then
+            if (rec_stream.eq.0) then
+ 16            format(/,
+     &'| WARNING !! cannot recover CUDA stream from OpenACC async',
+     &' queue',/,
+     &'             Skiping multi queues feature activation')
+               if (rank.eq.0) write(*,16)
+               return
+            end if
             dir_queue = acc_async_noval + 1
  13      format(' ***** Asynchronous Computation Overlapping enable'
      &          ,I5,/)
@@ -836,6 +904,35 @@ c
      &   print*,'error creating cuda Events  >', cuda_success
 
       end
+
+      subroutine syncWithStream(stream)
+      integer,optional::stream
+      integer stream_,istat
+
+      if (present(stream)) then
+         stream_= stream
+      else
+         stream_= rec_stream
+      end if
+      istat  = cudaStreamSynchronize(stream_)
+      if (istat.ne.0) print '(A,I5,A,I14)',' WARNING ! Error',istat,
+     &   ' synchronizing with stream ',stream_
+      end subroutine
+
+      subroutine comparetonoval(queue)
+      implicit none
+      integer queue
+      integer(CUDA_STREAM_KIND)::stream
+
+      stream = acc_get_cuda_stream(queue)
+      if (rec_stream.ne.stream) then
+  12  format(A,3I14,2I5)
+         print 12,'stream are differents'
+     &   ,rec_stream,dir_stream,stream,queue,rank
+      else
+         print*, 'equal stream',rec_stream
+      end if
+      end subroutine
 
       subroutine Finalize_async_recover
       implicit none

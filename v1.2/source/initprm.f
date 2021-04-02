@@ -24,6 +24,7 @@ c
       use fields
       use kanang
       use kangs
+      use kantor
       use katoms
       use kbonds
       use kchrge
@@ -141,6 +142,9 @@ c
       end do
       do i = 1, maxnbt
          kbt(i) = blank16
+      end do
+      do i = 1, maxnat
+         kat(i) = blank16
       end do
       do i = 1, maxntt
          ktt(i) = blank20
