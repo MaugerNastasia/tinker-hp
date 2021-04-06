@@ -754,6 +754,708 @@ c
       return
       end
 c
+c     subroutine reassignqtb: deal with particles changing of domain between two baoabqtb time steps
+c
+      subroutine reassignqtb(istep)
+      use atoms
+      use bound
+      use cell
+      use domdec
+      use freeze
+      use moldyn
+      use neigh
+      use potent
+      use adqtb
+      use qtb
+      use mpi
+      implicit none
+      integer i,istep,k
+      integer iproc,ierr,iglob
+      integer iloc
+      real*8 xr,yr,zr,eps1,eps2
+      integer tag,status(MPI_STATUS_SIZE)
+      integer, allocatable :: reqsend(:),reqrec(:)
+      integer, allocatable :: count2(:)
+      integer, allocatable :: buf3(:), buflen3(:), bufbeg3(:)
+      integer, allocatable :: buf4(:),buflen4(:),bufbeg4(:)
+      real*8, allocatable :: buffers(:,:),buffer(:,:)
+      real*8, allocatable :: buffersnoise(:,:,:),buffernoise(:,:,:)
+      real*8, allocatable :: buffersad(:,:,:),bufferad(:,:,:)
+      real*8, allocatable :: buffers1(:,:),buffer1(:,:)
+      real*8, allocatable :: temp(:,:,:)
+      integer, allocatable :: buf3bis(:,:)
+      integer, allocatable :: glob1(:),loc1(:)
+      integer rankloc,commloc,nprocloc,proc,j,jglob
+      integer nloc1
+      eps1 = 1.0d-10
+      eps2 = 1.0d-8
+c
+      if (use_pmecore) then
+        nprocloc = ndir
+        commloc  = comm_dir
+        rankloc  = rank_bis
+      else
+        nprocloc = nproc
+        commloc  = COMM_TINKER
+        rankloc  = rank
+      end if
+      allocate (glob1(n))
+      allocate (loc1(n))
+c
+      allocate (reqsend(nproc))
+      allocate (reqrec(nproc))
+c
+      allocate (count2(nproc))
+      allocate (buflen3(nproc))
+      allocate (bufbeg3(nproc))
+      allocate (buf3bis(nloc,nproc))
+      count2 = 0
+      buflen3 = 0
+      bufbeg3 = 0
+c
+c     get particules that changed of domain
+c
+      do i = 1, nloc
+        iglob = glob(i)
+        xr = x(iglob)
+        yr = y(iglob)
+        zr = z(iglob)
+        if (use_bounds) call image(xr,yr,zr)
+        if (abs(xr-xcell2).lt.eps1) xr = xr-eps2
+        if (abs(yr-ycell2).lt.eps1) yr = yr-eps2
+        if (abs(zr-zcell2).lt.eps1) zr = zr-eps2
+        do iproc = 0, nprocloc-1
+          if (iproc.eq.rank) cycle
+          if ((zr.ge.zbegproc(iproc+1)).and.
+     $     (zr.lt.zendproc(iproc+1)).and.(yr.ge.ybegproc(iproc+1))
+     $    .and.(yr.lt.yendproc(iproc+1)).and.(xr.ge.xbegproc(iproc+1))
+     $    .and.(xr.lt.xendproc(iproc+1))) then
+            buflen3(iproc+1) = buflen3(iproc+1)+1
+            buf3bis(buflen3(iproc+1),iproc+1) = iglob
+          end if
+        end do
+      end do
+      bufbeg3(1) = 1
+      do iproc = 1, nproc-1
+        bufbeg3(iproc+1) = bufbeg3(iproc)+buflen3(iproc)
+      end do
+c
+      allocate (buf3(bufbeg3(nproc)+buflen3(nproc)))
+      buf3 = 0
+c
+      do iproc = 1, nproc
+        buf3(bufbeg3(iproc):(bufbeg3(iproc)+buflen3(iproc)-1)) = 
+     $    buf3bis(1:buflen3(iproc),iproc)
+      end do
+c
+      if (nprocloc.eq.1) return
+c
+      if ((use_pmecore).and.(rank.ge.ndir)) goto 20
+c
+c     get size of buffers
+c
+      allocate (buflen4(nprocloc))
+      buflen4 = 0
+      allocate (bufbeg4(nprocloc))
+      bufbeg4 = 0
+c
+      do iproc = 1, nneig_recep
+        proc = pneig_recep(iproc)
+        tag = nprocloc*rankloc + proc + 1
+        call MPI_IRECV(buflen4(proc+1),1,MPI_INT,
+     $   proc,tag,commloc,reqrec(iproc),ierr)
+      end do
+      do iproc = 1, nneig_send
+        proc = pneig_send(iproc)
+        tag = nprocloc*proc + rankloc + 1
+        call MPI_ISEND(buflen3(proc+1),1,MPI_INT,
+     $   proc,tag,commloc,reqsend(iproc),ierr)
+      end do
+c
+      do iproc = 1, nneig_recep
+        proc = pneig_recep(iproc)
+        call MPI_WAIT(reqrec(iproc),status,ierr)
+      end do
+      do iproc = 1, nneig_send
+        proc = pneig_recep(iproc)
+        call MPI_WAIT(reqsend(iproc),status,ierr)
+      end do
+c
+      bufbeg4(pneig_recep(1)+1) = 1
+      do iproc = 2, nneig_recep
+        bufbeg4(pneig_recep(iproc)+1) = bufbeg4(pneig_recep(iproc-1)+1)
+     $    +buflen4(pneig_recep(iproc-1)+1)
+      end do
+c
+c     communicate the corresponding indexes, positions, speed and accelerations
+c
+      proc = pneig_send(nneig_send)
+      allocate (buffers(10,bufbeg3(proc+1)+buflen3(proc+1)))
+      proc = pneig_recep(nneig_recep)
+      allocate (buffer(10,bufbeg4(proc+1)+buflen4(proc+1)))
+c
+c     Begin reception 
+c
+      do i = 1, nneig_recep
+        proc = pneig_recep(i)
+        tag = nprocloc*rankloc + proc + 1
+        call MPI_IRECV(buffer(1,bufbeg4(proc+1)),10*buflen4(proc+1),
+     $    MPI_REAL8,proc,tag,COMM_TINKER,reqrec(i),ierr)
+      end do
+      do i = 1, nneig_send
+        proc = pneig_send(i)
+        do j = 0, buflen3(proc+1)-1
+          jglob = buf3(bufbeg3(proc+1)+j)
+          buffers(1,bufbeg3(proc+1)+j) = x(jglob)
+          buffers(2,bufbeg3(proc+1)+j) = y(jglob)
+          buffers(3,bufbeg3(proc+1)+j) = z(jglob)
+          buffers(4,bufbeg3(proc+1)+j) = v(1,jglob)
+          buffers(5,bufbeg3(proc+1)+j) = v(2,jglob)
+          buffers(6,bufbeg3(proc+1)+j) = v(3,jglob)
+          buffers(7,bufbeg3(proc+1)+j) = a(1,jglob)
+          buffers(8,bufbeg3(proc+1)+j) = a(2,jglob)
+          buffers(9,bufbeg3(proc+1)+j) = a(3,jglob)
+          buffers(10,bufbeg3(proc+1)+j) = jglob
+        end do
+      end do
+c
+c     send the positions, the velocities and the accelerations
+c
+      do i = 1, nneig_send
+        proc = pneig_send(i)
+        tag = nprocloc*proc + rankloc + 1
+        call MPI_ISEND(buffers(1,bufbeg3(proc+1)),10*buflen3(proc+1),
+     $   MPI_REAL8,proc,tag,COMM_TINKER,reqsend(i),ierr)
+      end do
+      do i = 1, nneig_send
+        proc = pneig_send(i)
+        call MPI_WAIT(reqsend(i),status,ierr)
+      end do
+      do i = 1, nneig_recep
+        proc = pneig_recep(i)
+        call MPI_WAIT(reqrec(i),status,ierr)
+        do j = 0, buflen4(proc+1)-1
+          iglob = int(buffer(10,bufbeg4(proc+1)+j))
+          x(iglob) = buffer(1,bufbeg4(proc+1)+j)
+          y(iglob) = buffer(2,bufbeg4(proc+1)+j)
+          z(iglob) = buffer(3,bufbeg4(proc+1)+j)
+          v(1,iglob) = buffer(4,bufbeg4(proc+1)+j)
+          v(2,iglob) = buffer(5,bufbeg4(proc+1)+j)
+          v(3,iglob) = buffer(6,bufbeg4(proc+1)+j)
+          a(1,iglob) = buffer(7,bufbeg4(proc+1)+j)
+          a(2,iglob) = buffer(8,bufbeg4(proc+1)+j)
+          a(3,iglob) = buffer(9,bufbeg4(proc+1)+j)
+        end do
+      end do
+
+c      if (adaptive) then
+cc
+cc     communicate the colored noise and the velocities for adaptive QTB 
+cc
+c        proc = pneig_send(nneig_send)
+c        allocate (buffersad(6,nseg+1,bufbeg3(proc+1)+
+c     $    buflen3(proc+1)))
+c        proc = pneig_recep(nneig_recep)
+c        allocate (bufferad(6,nseg+1,bufbeg4(proc+1)+buflen4(proc+1)))
+cc
+cc       Begin reception 
+cc
+c        do i = 1, nneig_recep
+c          proc = pneig_recep(i)
+c          tag = nprocloc*rankloc + proc + 1
+c          call MPI_IRECV(bufferad(1,1,bufbeg4(proc+1)),6*(nseg+1)*
+c     $      buflen4(proc+1),
+c     $      MPI_REAL8,proc,tag,COMM_BEAD,reqrec(i),ierr)
+c        end do
+c        do i = 1, nneig_send
+c          proc = pneig_send(i)
+c          do j = 0, buflen3(proc+1)-1
+c            jglob = buf3(bufbeg3(proc+1)+j)
+c            buffersad(1,1,bufbeg3(proc+1)+j) = jglob
+c            buffersad(1:3,2:nseg+1,bufbeg3(proc+1)+j) = 
+c     $         vad(1:3,jglob,1:nseg)
+c            buffersad(4:6,2:nseg+1,bufbeg3(proc+1)+j) = 
+c     $         fad(1:3,jglob,1:nseg)
+c          end do
+c        end do
+cc
+cc       send the noise
+cc
+c        do i = 1, nneig_send
+c          proc = pneig_send(i)
+c          tag = nprocloc*proc + rankloc + 1
+c          call MPI_ISEND(buffersad(1,1,bufbeg3(proc+1)),6*(nseg+1)*
+c     $     buflen3(proc+1),
+c     $     MPI_REAL8,proc,tag,COMM_BEAD,reqsend(i),ierr)
+c        end do
+c        do i = 1, nneig_send
+c          proc = pneig_send(i)
+c          call MPI_WAIT(reqsend(i),status,ierr)
+c        end do
+c        do i = 1, nneig_recep
+c          proc = pneig_recep(i)
+c          call MPI_WAIT(reqrec(i),status,ierr)
+c          do j = 0, buflen4(proc+1)-1
+c            iglob = int(bufferad(1,1,bufbeg4(proc+1)+j))
+c            vad(1:3,iglob,1:nseg) = bufferad(1:3,2:(nseg+1),
+c     $       bufbeg4(proc+1)+j)
+c            fad(1:3,iglob,1:nseg) = bufferad(4:6,2:(nseg+1),
+c     $       bufbeg4(proc+1)+j)
+c          end do
+c        end do
+c      end if
+c
+c      if ((mod(istep,nseg).ne.0)) then
+cc
+cc     communicate the COLORED noise of the Langevin dynamic
+cc
+c      proc = pneig_send(nneig_send)
+c      allocate (buffersnoise(3,nseg+1,bufbeg3(proc+1)+
+c     $  buflen3(proc+1)))
+c      proc = pneig_recep(nneig_recep)
+c      allocate (buffernoise(3,nseg+1,bufbeg4(proc+1)+buflen4(proc+1)))
+cc
+cc     Begin reception 
+cc
+c      do i = 1, nneig_recep
+c        proc = pneig_recep(i)
+c        tag = nprocloc*rankloc + proc + 1
+c        call MPI_IRECV(buffernoise(1,1,bufbeg4(proc+1)),3*(nseg+1)*
+c     $    buflen4(proc+1),
+c     $    MPI_REAL8,proc,tag,COMM_BEAD,reqrec(i),ierr)
+c      end do
+c      do i = 1, nneig_send
+c        proc = pneig_send(i)
+c        do j = 0, buflen3(proc+1)-1
+c          jglob = buf3(bufbeg3(proc+1)+j)
+c          buffersnoise(1,1,bufbeg3(proc+1)+j) = jglob
+c          buffersnoise(1:3,2:nseg+1,bufbeg3(proc+1)+j) = 
+c     $       rt(1:3,jglob,:)
+c        end do
+c      end do
+cc
+cc     send the noise
+cc
+c      do i = 1, nneig_send
+c        proc = pneig_send(i)
+c        tag = nprocloc*proc + rankloc + 1
+c        call MPI_ISEND(buffersnoise(1,1,bufbeg3(proc+1)),3*(nseg+1)*
+c     $   buflen3(proc+1),
+c     $   MPI_REAL8,proc,tag,COMM_BEAD,reqsend(i),ierr)
+c      end do
+c      do i = 1, nneig_send
+c        proc = pneig_send(i)
+c        call MPI_WAIT(reqsend(i),status,ierr)
+c      end do
+c      do i = 1, nneig_recep
+c        proc = pneig_recep(i)
+c        call MPI_WAIT(reqrec(i),status,ierr)
+c        do j = 0, buflen4(proc+1)-1
+c          iglob = int(buffernoise(1,1,bufbeg4(proc+1)+j))
+c          rt(1:3,iglob,:) = buffernoise(1:3,2:nseg+1,bufbeg4(proc+1)+j)
+c        end do
+c      end do
+c      end if
+c
+c     if rattle is used, also send the old coordinates
+c
+      if (use_rattle) then
+
+        proc = pneig_send(nneig_send)
+        allocate (buffers1(4,bufbeg3(proc+1)+buflen3(proc+1)))
+        proc = pneig_recep(nneig_recep)
+        allocate (buffer1(4,bufbeg4(proc+1)+buflen4(proc+1)))
+c
+c     Begin reception 
+c
+        do i = 1, nneig_recep
+          proc = pneig_recep(i)
+          tag = nprocloc*rankloc + proc + 1
+          call MPI_IRECV(buffer1(1,bufbeg4(proc+1)),4*buflen4(proc+1),
+     $      MPI_REAL8,proc,tag,COMM_TINKER,reqrec(i),ierr)
+        end do
+        do i = 1, nneig_send
+          proc = pneig_send(i)
+          do j = 0, buflen3(proc+1)-1
+            jglob = buf3(bufbeg3(proc+1)+j)
+            buffers1(1,bufbeg3(proc+1)+j) = jglob
+            buffers1(2,bufbeg3(proc+1)+j) = xold(jglob)
+            buffers1(3,bufbeg3(proc+1)+j) = yold(jglob)
+            buffers1(4,bufbeg3(proc+1)+j) = zold(jglob)
+          end do
+        end do
+c
+c       send the old positions
+c
+        do i = 1, nneig_send
+          proc = pneig_send(i)
+          tag = nprocloc*proc + rankloc + 1
+          call MPI_ISEND(buffers1(1,bufbeg3(proc+1)),4*buflen3(proc+1),
+     $     MPI_REAL8,proc,tag,COMM_TINKER,reqsend(i),ierr)
+        end do
+        do i = 1, nneig_send
+          proc = pneig_send(i)
+          call MPI_WAIT(reqsend(i),status,ierr)
+        end do
+        do i = 1, nneig_recep
+          proc = pneig_recep(i)
+          call MPI_WAIT(reqrec(i),status,ierr)
+          do j = 0, buflen4(proc+1)-1
+            iglob = int(buffer1(1,bufbeg4(proc+1)+j))
+            xold(iglob) = buffer1(2,bufbeg4(proc+1)+j)
+            yold(iglob) = buffer1(3,bufbeg4(proc+1)+j)
+            zold(iglob) = buffer1(4,bufbeg4(proc+1)+j)
+          end do
+        end do
+        deallocate (buffer1)
+        deallocate (buffers1)
+      end if
+
+c
+c     reorder indexes accordingly and build local repart array
+c
+      repart = 0
+c
+c     remove atoms that left the domain 
+c
+
+      nloc1 = 0
+      glob1 = 0
+      loc1  = 0
+      do i = 1, nloc
+        iglob = glob(i)
+        do j = 1, bufbeg3(nproc)+buflen3(nproc)-1
+          jglob = buf3(j)
+          if (iglob.eq.jglob) goto 10
+        end do
+        nloc1 = nloc1 + 1
+        glob1(nloc1) = iglob
+        loc1(iglob) = nloc1
+        repart(iglob) = rank
+ 10     continue
+      end do
+c
+c     add atoms that entered the domain
+c
+      proc = pneig_recep(nneig_recep)+1
+      do j = 1, bufbeg4(proc)+buflen4(proc)-1
+        jglob = int(buffer(10,j))
+        nloc1 = nloc1 + 1
+        glob1(nloc1) = jglob
+        loc1(jglob) = nloc1
+        repart(jglob) = rank
+      end do
+      deallocate (buffer)
+      deallocate (buffers)
+
+c      if ((mod(istep,nseg).ne.0)) then
+c 
+c      make a copy of rt and allocate new array with new nloc size
+c
+        allocate(temp(3,nloc,nseg))
+        temp = rt
+
+        if (allocated(rt)) deallocate(rt)
+        allocate(rt(3,nloc1,nseg))
+c
+c       fill new rt with noise from atoms that stayed in the domain
+c
+        k = 0
+        do i = 1, nloc
+          iglob = glob(i)
+          do j = 1, bufbeg3(nproc)+buflen3(nproc)-1
+            jglob = buf3(j)
+            if (iglob.eq.jglob) goto 30
+          end do
+          k = k + 1
+          rt(:,k,:) = temp(:,loc(iglob),:)
+ 30       continue
+        end do
+ 
+c
+c     communicate the COLORED noise of the Langevin dynamic
+c
+      proc = pneig_send(nneig_send)
+      allocate (buffersnoise(3,nseg+1,bufbeg3(proc+1)+
+     $  buflen3(proc+1)))
+      proc = pneig_recep(nneig_recep)
+      allocate (buffernoise(3,nseg+1,bufbeg4(proc+1)+buflen4(proc+1)))
+c
+c     Begin reception 
+c
+      do i = 1, nneig_recep
+        proc = pneig_recep(i)
+        tag = nprocloc*rankloc + proc + 1
+        call MPI_IRECV(buffernoise(1,1,bufbeg4(proc+1)),3*(nseg+1)*
+     $    buflen4(proc+1),
+     $    MPI_REAL8,proc,tag,COMM_TINKER,reqrec(i),ierr)
+      end do
+      do i = 1, nneig_send
+        proc = pneig_send(i)
+        do j = 0, buflen3(proc+1)-1
+          jglob = buf3(bufbeg3(proc+1)+j)
+          buffersnoise(1,1,bufbeg3(proc+1)+j) = jglob
+          buffersnoise(1:3,2:nseg+1,bufbeg3(proc+1)+j) = 
+     $       temp(1:3,loc(jglob),1:nseg)
+        end do
+      end do
+c
+c     send the noise
+c
+      do i = 1, nneig_send
+        proc = pneig_send(i)
+        tag = nprocloc*proc + rankloc + 1
+        call MPI_ISEND(buffersnoise(1,1,bufbeg3(proc+1)),3*(nseg+1)*
+     $   buflen3(proc+1),
+     $   MPI_REAL8,proc,tag,COMM_TINKER,reqsend(i),ierr)
+      end do
+      do i = 1, nneig_send
+        proc = pneig_send(i)
+        call MPI_WAIT(reqsend(i),status,ierr)
+      end do
+      do i = 1, nneig_recep
+        proc = pneig_recep(i)
+        call MPI_WAIT(reqrec(i),status,ierr)
+        do j = 0, buflen4(proc+1)-1
+          iglob = int(buffernoise(1,1,bufbeg4(proc+1)+j))
+          rt(1:3,loc1(iglob),1:nseg) = buffernoise(1:3,2:nseg+1,
+     $       bufbeg4(proc+1)+j)
+        end do
+      end do
+c      end if
+
+      if (adaptive) then
+c 
+c      make a copy of fad and vad and allocate new array with new nloc size
+c
+        if (allocated (temp)) deallocate(temp)
+        allocate(temp(6,nloc,nseg))
+        temp(1:3,:,:) = vad(1:3,:,:)
+        temp(4:6,:,:) = fad(1:3,:,:)
+        if (allocated(vad)) deallocate(vad)
+        allocate (vad(3,nloc1,nseg))
+        if (allocated(fad)) deallocate(fad)
+        allocate (fad(3,nloc1,nseg))
+c
+c       fill new vad and fad with noise from atoms that stayed in the domain
+c
+        k = 0
+        do i = 1, nloc
+          iglob = glob(i)
+          do j = 1, bufbeg3(nproc)+buflen3(nproc)-1
+            jglob = buf3(j)
+            if (iglob.eq.jglob) goto 40
+          end do
+          k = k + 1
+          vad(:,k,:) = temp(1:3,loc(iglob),:)
+          fad(:,k,:) = temp(4:6,loc(iglob),:)
+ 40       continue
+        end do
+c
+c     communicate the colored noise and the velocities for adaptive QTB 
+c
+        proc = pneig_send(nneig_send)
+        allocate (buffersad(6,nseg+1,bufbeg3(proc+1)+
+     $    buflen3(proc+1)))
+        proc = pneig_recep(nneig_recep)
+        allocate (bufferad(6,nseg+1,bufbeg4(proc+1)+buflen4(proc+1)))
+c
+c       Begin reception 
+c
+        do i = 1, nneig_recep
+          proc = pneig_recep(i)
+          tag = nprocloc*rankloc + proc + 1
+          call MPI_IRECV(bufferad(1,1,bufbeg4(proc+1)),6*(nseg+1)*
+     $      buflen4(proc+1),
+     $      MPI_REAL8,proc,tag,COMM_TINKER,reqrec(i),ierr)
+        end do
+        do i = 1, nneig_send
+          proc = pneig_send(i)
+          do j = 0, buflen3(proc+1)-1
+            jglob = buf3(bufbeg3(proc+1)+j)
+            buffersad(1,1,bufbeg3(proc+1)+j) = jglob
+            buffersad(1:3,2:nseg+1,bufbeg3(proc+1)+j) = 
+     $         temp(1:3,loc(jglob),1:nseg)
+            buffersad(4:6,2:nseg+1,bufbeg3(proc+1)+j) = 
+     $         temp(4:6,loc(jglob),1:nseg)
+          end do
+        end do
+        deallocate(temp)
+c
+c       send the noise
+c
+        do i = 1, nneig_send
+          proc = pneig_send(i)
+          tag = nprocloc*proc + rankloc + 1
+          call MPI_ISEND(buffersad(1,1,bufbeg3(proc+1)),6*(nseg+1)*
+     $     buflen3(proc+1),
+     $     MPI_REAL8,proc,tag,COMM_TINKER,reqsend(i),ierr)
+        end do
+        do i = 1, nneig_send
+          proc = pneig_send(i)
+          call MPI_WAIT(reqsend(i),status,ierr)
+        end do
+        do i = 1, nneig_recep
+          proc = pneig_recep(i)
+          call MPI_WAIT(reqrec(i),status,ierr)
+          do j = 0, buflen4(proc+1)-1
+            iglob = int(bufferad(1,1,bufbeg4(proc+1)+j))
+            vad(1:3,loc1(iglob),1:nseg) = bufferad(1:3,2:(nseg+1),
+     $       bufbeg4(proc+1)+j)
+            fad(1:3,loc1(iglob),1:nseg) = bufferad(4:6,2:(nseg+1),
+     $       bufbeg4(proc+1)+j)
+          end do
+        end do
+      end if
+
+      nloc = nloc1
+      domlen(rank+1) = nloc
+      glob = glob1
+      loc  = loc1
+
+
+c
+ 20   call orderbuffer(.false.)
+c
+      if ((mod(istep,nseg).eq.0)) then
+c
+c     communicate the white noise of the Langevin dynamic
+c
+      buflen3 = 0
+      buflen4 = 0
+      buf3bis = 0
+      do i = 1, nloc
+        iglob = glob(i)
+        proc = repartnoise(iglob)
+        if (proc.eq.rank) cycle
+        buflen3(proc+1) = buflen3(proc+1) + 1
+        buf3bis(buflen3(proc+1),proc+1) = iglob 
+      end do
+      bufbeg3(1) = 1
+      do iproc = 1, nproc-1
+        bufbeg3(iproc+1) = bufbeg3(iproc)+buflen3(iproc)
+      end do
+c
+      if (allocated(buf3)) deallocate(buf3)
+      allocate (buf3(bufbeg3(nproc)+buflen3(nproc)))
+      buf3 = 0
+
+      do iproc = 1, nproc
+        buf3(bufbeg3(iproc):(bufbeg3(iproc)+buflen3(iproc)-1)) = 
+     $    buf3bis(1:buflen3(iproc),iproc)
+      end do
+
+      do iproc = 0, nproc-1
+        tag = nprocloc*rankloc + iproc + 1
+        call MPI_IRECV(buflen4(iproc+1),1,MPI_INT,
+     $   iproc,tag,commloc,reqrec(iproc+1),ierr)
+      end do
+      do iproc = 0, nproc-1
+        tag = nprocloc*iproc + rankloc + 1
+        call MPI_ISEND(buflen3(iproc+1),1,MPI_INT,
+     $   iproc,tag,commloc,reqsend(iproc+1),ierr)
+      end do
+c
+      do iproc = 0, nproc-1
+        call MPI_WAIT(reqrec(iproc+1),status,ierr)
+      end do
+      do iproc = 0, nproc-1
+        call MPI_WAIT(reqsend(iproc+1),status,ierr)
+      end do
+c
+      bufbeg4(1) = 1
+      do iproc = 1, nproc-1
+        bufbeg4(iproc+1) = bufbeg4(iproc)+buflen4(iproc)
+      end do
+      allocate (buf4(bufbeg4(nproc)+buflen4(nproc)))
+      buf4 = 0
+c
+c     Begin reception 
+c
+      do i = 0, nproc-1 
+        proc = i
+        tag = nprocloc*rankloc + proc + 1
+        call MPI_IRECV(buf4(bufbeg4(proc+1)),buflen4(proc+1),
+     $    MPI_INT,proc,tag,COMM_TINKER,reqrec(i+1),ierr)
+      end do
+c
+      do i = 0, nproc-1
+        proc = i
+        tag = nprocloc*proc + rankloc + 1
+        call MPI_ISEND(buf3(bufbeg3(proc+1)),buflen3(proc+1),
+     $   MPI_INT,proc,tag,COMM_TINKER,reqsend(i+1),ierr)
+      end do
+      do i = 0, nproc-1
+        proc = i
+        call MPI_WAIT(reqsend(i+1),status,ierr)
+      end do
+      do i = 0, nproc-1
+        proc = i
+        call MPI_WAIT(reqrec(i+1),status,ierr)
+      end do
+c
+      proc = nproc-1
+      if (allocated(buffersnoise)) deallocate(buffersnoise)
+      allocate (buffersnoise(3,3*nseg,bufbeg4(proc+1)+
+     $  buflen4(proc+1)))
+      proc = nproc-1
+      if (allocated(buffernoise)) deallocate(buffernoise)
+      allocate (buffernoise(3,3*nseg,bufbeg3(proc+1)+buflen3(proc+1)))
+c
+c     Begin reception 
+c
+      do i = 0, nproc-1 
+        proc = i
+        tag = nprocloc*rankloc + proc + 1
+        call MPI_IRECV(buffernoise(1,1,bufbeg3(proc+1)),3*(3*nseg)*
+     $    buflen3(proc+1),
+     $    MPI_REAL8,proc,tag,COMM_TINKER,reqrec(i+1),ierr)
+      end do
+      do i = 0, nproc-1
+        proc = i
+        do j = 0, buflen4(proc+1)-1
+          jglob = buf4(bufbeg4(proc+1)+j)
+          buffersnoise(1:3,1:(3*nseg),bufbeg4(proc+1)+j) = 
+     $       noise(1:3,jglob,:)
+        end do
+      end do
+
+c     send the noise
+c
+      do i = 0, nproc-1
+        proc = i
+        tag = nprocloc*proc + rankloc + 1
+        call MPI_ISEND(buffersnoise(1,1,bufbeg4(proc+1)),3*(3*nseg)*
+     $   buflen4(proc+1),
+     $   MPI_REAL8,proc,tag,COMM_TINKER,reqsend(i+1),ierr)
+      end do
+      do i = 0, nproc-1
+        proc = i
+        call MPI_WAIT(reqsend(i+1),status,ierr)
+      end do
+      do i = 0, nproc-1
+        proc = i
+        call MPI_WAIT(reqrec(i+1),status,ierr)
+        do j = 0, buflen3(proc+1)-1
+          iglob = buf3(bufbeg3(proc+1)+j)
+          noise(1:3,iglob,:) =buffernoise(1:3,1:(3*nseg),
+     $     bufbeg3(proc+1)+j)
+        end do
+      end do
+      deallocate(buffersnoise,buffernoise)
+      end if
+c
+      deallocate (buf3bis)
+      deallocate (glob1)
+      deallocate (count2)
+      deallocate (buf3)
+      deallocate (buflen3)
+      deallocate (bufbeg3)
+      deallocate (reqsend)
+      deallocate (reqrec)
+      return
+      end
+c
 c     subroutine reassignrespa: deal with particles changing of domain between two time steps
 c
       subroutine reassignrespa(ialt,naltloc)

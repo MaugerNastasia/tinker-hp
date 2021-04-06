@@ -15,6 +15,7 @@ c     for a molecular dynamics trajectory, including restarts
 c
 c
       subroutine mdinit(dt)
+      use adqtb
       use atmtyp
       use atoms
       use bath
@@ -35,6 +36,7 @@ c
       use moldyn
       use mpole
       use neigh
+      use qtb
       use polpot
       use units 
       use uprior
@@ -99,8 +101,26 @@ c
 c      volscale = 'ATOMIC'
       gamma = 1.0d0
       gammapiston = 20.0d0
-      masspiston = 0.000200d0
+      masspiston=100000 !for adQTB
+c      masspiston = 0.000200d0
       virsave = 0d0
+      omegamax = pi/dt
+      omegacut = 0.45*omegamax
+      domega = 10d0
+      omegasmear = omegamax/100.0
+      Tseg = 1
+      A_gamma=0.1
+      compteur=0
+      skipseg=3
+      noQTB=.FALSE.
+      corr_pot=.false.
+      adaptive=.false.
+      startsavespec=25
+      corr_fact_qtb=1.0d0
+      register_spectra=.false.
+      A_gamma_piston=0.1
+      ir=.false.
+c
 c
 c     check for keywords containing any altered parameters
 c
@@ -163,6 +183,36 @@ c
             read (string,*,err=10,end=10) gammapiston
          else if (keyword(1:12) .eq. 'MASSPISTON ') then
             read (string,*,err=10,end=10) masspiston
+         else if (keyword(1:6) .eq. 'ADQTB ') then
+            adaptive = .true.
+         else if (keyword(1:6) .eq. 'NOQTB ') then
+            noQTB = .true.
+         else if (keyword(1:7) .eq. 'VIRNUM ') then
+            virnum=.true.
+            if(ranktot.eq.0) then
+              write(*,*) 'WARNING - virial pressure',
+     &               ' computed using finite differences.'
+            endif
+         else if (keyword(1:13) .eq. 'KIN_PRES_AVG ') then
+            kin_instant=.false.
+         else if (keyword(1:14) .eq. 'STARTSAVESPEC ') then
+            read (string,*,err=10,end=10) startsavespec
+         else if (keyword(1:14) .eq. 'CORR_FACT_QTB ') then
+            read (string,*,err=10,end=10) corr_fact_qtb
+            write(*,*) 'WARNING _ USed of Kinetic correction'
+            write(*,*) 'corr_fact_qtb=', corr_fact_qtb
+         else if (keyword(1:9) .eq. 'CORR_POT ') then
+            corr_pot = .true.
+            write(*,*) 'WARNING -  used of potential',
+     &              ' correction.'
+         else if (keyword(1:17) .eq. 'REGISTER_SPECTRA ') then
+            write(*,*) 'Register the different spectras while',
+     &            ' using the QTB method'
+            register_spectra = .true.
+         else if (keyword(1:8) .eq. 'A_GAMMA_piston ') then
+            read (string,*,err=10,end=10) a_gamma_piston
+         else if (keyword(1:11) .eq. 'IR_SPECTRA ') then
+            ir = .true.
 #ifdef PLUMED
 c
 c initialise PLUMED
@@ -210,6 +260,31 @@ c
          end if
    10    continue
       end do
+
+c
+c     Enforce the use of the adQTB and the spectrum
+c
+      if ((register_spectra).and.(.NOT.adaptive)) then
+        integrate='QTB'
+        adaptive=.true.
+        a_gamma=0
+        a_gamma_piston=0
+      endif
+          
+      if(ir) then
+            write(*,*) 'REGISTER THE INFRARED SPECTRUM'
+            nseg=nint(Tseg/dt)
+            Tseg=nseg*dt
+            allocate(vad(3,n,nseg))
+      endif
+        
+      if ((rank.eq.0).and.(adaptive)) then
+        integrate='QTB'
+        write(*,*) 'Using adQTB with adaptive gamma coefficients'
+        write(*,*) 'a_gamma=', a_gamma
+        write(*,*) 'a_gamma_piston=', a_gamma_piston
+      endif
+
 c
 c     enforce the use of monte-carlo barostat with the TCG family of solvers
 c
@@ -221,10 +296,24 @@ c
 c
 c     enforce the use of baoabpiston integrator with Langevin Piston barostat
 c
-      if (barostat.eq.'LANGEVIN') then
-        integrate = 'BAOABPISTON'
-        call plangevin()
-      end if
+
+      if (isobaric) then
+         if (integrate.eq.'QTB') then
+            integrate = 'PISTONQTB'
+            if(barostat/='LANGEVIN') then
+              barostat='LANGEVIN'
+              write(*,*) 'WARNING - enforced langevin piston for QTB'
+            endif
+          else if ((barostat.eq.'LANGEVIN')
+     &                              .and.(integrate.eq.'BAOAB')) then
+            integrate='BAOABPISTON'
+            call plangevin()
+         endif    
+      endif
+c!!!!!!!!!      if (barostat.eq.'LANGEVIN') then
+c!!!!!!!!!        integrate = 'BAOABPISTON'
+c!!!!!!!!!        call plangevin()
+c!!!!!!!!!      end if
 c
 c     default time steps for respa and respa1 integrators
 c
@@ -310,7 +399,8 @@ c     initialization for Langevin dynamics
 c
       if ((integrate .eq. 'BBK').or.(integrate.eq.'BAOAB').or.
      $ (integrate.eq.'BAOABRESPA').or.(integrate.eq.'BAOABRESPA1').or.
-     $ (integrate.eq.'BAOABPISTON'))
+     $ (integrate.eq.'BAOABPISTON').or.(integrate.eq.'QTB').or.
+     $ (integrate.eq.'PISTONQTB'))
      $   then
          if (.not.(isothermal)) then
            if (rank.eq.0) then
@@ -389,11 +479,17 @@ c
          call mechanicstep(0)
          call allocstep
          call nblist(0)
-
-         if (barostat.eq.'LANGEVIN') then
-           integrate = 'BAOABPISTON'
-           call plangevin()
-         end if
+          
+         if ((barostat.eq.'LANGEVIN')
+     &                              .and.(integrate.eq.'BAOAB')) then
+            integrate='BAOABPISTON'
+            call plangevin()
+          endif
+c!!!!!!!!!!!!!!!
+c!!!!!!!!!!!!!!!         if (barostat.eq.'LANGEVIN') then
+c!!!!!!!!!!!!!!!           integrate = 'BAOABPISTON'
+c!!!!!!!!!!!!!!!           call plangevin()
+c!!!!!!!!!!!!!!!         end if
 c    
 c     set velocities and fast/slow accelerations for RESPA method
 c
@@ -567,6 +663,30 @@ c
          deallocate (derivs)
          if (nuse .eq. n)  call mdrest (0)
       end if
+      
+c
+c     initialization for QTB
+c
+      if ((integrate.eq.'QTB')
+     &  .or.(integrate.eq.'PISTONQTB'))!.or.(integrate.eq.'QTB4SITE').or.
+c     $   (integrate.eq.'PQTB4SITE'))
+     $    then
+            if(.not.kin_instant) then
+              if(ranktot.eq.0) then
+                write(*,*) "WARNING - enforcing the use of "
+     &             ,"velocities for pressure estimation"
+              endif
+              kin_instant=.TRUE.
+            endif
+            nseg=nint(Tseg/dt)
+            Tseg=nseg*dt
+            call qtbinit(dt)
+      endif   
+      
+      if (isobaric) then
+c        if (integrate.eq.'PQTB4SITE') call init_langevin_piston()
+        if (integrate.eq.'PISTONQTB') call plangevin()
+      endif
 c
 c     check for any prior dynamics coordinate sets
 c

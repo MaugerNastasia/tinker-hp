@@ -293,9 +293,17 @@ c
          if (rank.eq.0) write (iout,450)
   450    format (/,' Molecular Dynamics Trajectory via',
      &              ' BAOAB-PISTON Algorithm')
-      else
+      else if (integrate .eq. 'QTB') then
          if (rank.eq.0) write (iout,460)
-  460    format (/,' Molecular Dynamics Trajectory via',
+  460    format (/,' QTB Molecular Dynamics Trajectory via',
+     &              ' BAOAB Algorithm')
+      else if (integrate .eq. 'PISTONQTB') then
+         if (rank.eq.0) write (iout,470)
+  470    format (/,' QTB Molecular Dynamics Trajectory via',
+     &              ' BAOAB-PISTON-QTB')
+      else
+         if (rank.eq.0) write (iout,480)
+  480    format (/,' Molecular Dynamics Trajectory via',
      &              ' Modified Beeman Algorithm')
       end if
 c
@@ -319,6 +327,10 @@ c
            call baoabrespa1(istep,dt)
          else if (integrate .eq. 'RESPA1') then
            call respa1(istep,dt)
+         else if (integrate .eq. 'QTB') then
+            call baoabqtb(istep,dt)
+         else if (integrate .eq. 'PISTONQTB') then
+            call baoabpistonqtb(istep,dt)
          else
             call beeman (istep,dt)
          end if

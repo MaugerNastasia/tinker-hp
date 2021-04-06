@@ -51,9 +51,11 @@ c     efreq       conversion from Hartree to cm-1
 c     coulomb     conversion from electron**2/Ang to kcal/mole
 c     debye       conversion from electron-Ang to Debyes
 c     prescon     conversion from kcal/mole/Ang**3 to Atm
+c     hbar_planck        Planck's constant in g*Ang**2/ps**2/mole*ps
 c
 c
       module units
+      use math
       implicit none
       real*8 avogadro,lightspd
       real*8 boltzmann,gasconst
@@ -62,7 +64,7 @@ c
       real*8 bohr,hartree
       real*8 evolt,efreq
       real*8 coulomb,debye
-      real*8 prescon
+      real*8 prescon,hbar_planck
       parameter (avogadro=6.02214129d+23)
       parameter (lightspd=2.99792458d-2)
       parameter (boltzmann=0.831446215d0)
@@ -78,5 +80,6 @@ c
       parameter (coulomb=332.063714d0)
       parameter (debye=4.80321d0)
       parameter (prescon=6.85684112d+4)
+      parameter (hbar_planck=(planck*1.d11*avogadro)/(2d0*pi))
       save
       end

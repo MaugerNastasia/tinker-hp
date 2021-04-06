@@ -16,6 +16,7 @@ c     and to periodically save the state of the trajectory
 c
 c
       subroutine mdstat (istep,dt,etot,epot,ekin,temp,pres)
+      use adqtb
       use sizes
       use atoms
       use bound
@@ -192,10 +193,11 @@ c
               end if
            end if
            if (use_bounds .and. integrate.ne.'STOCHASTIC') then
-              write (iout,30)  istep,etot,epot,ekin,temp,pres
+              write (iout,30)  istep,etot,epot,ekin/corr_fact_qtb,temp
+     &                                ,pres
    30         format (i10,3f14.4,2f11.2)
            else
-              write (iout,40)  istep,etot,epot,ekin,temp
+              write (iout,40)  istep,etot,epot,ekin/corr_fact_qtb,temp
    40         format (i10,3f14.4,f11.2)
            end if
         end if

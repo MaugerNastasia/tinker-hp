@@ -16,10 +16,12 @@ c     via a barostat method
 c
 c
       subroutine pressure (dt,ekin,pres,stress,istep)
+      use adqtb
       use bath
       use bound
       use boxes
       use domdec
+      use mdstuf
       use units
       use virial
       implicit none
@@ -27,7 +29,7 @@ c
       real*8 dt
       real*8 pres
       real*8 factor
-      real*8 ekin(3,3)
+      real*8 ekin(3,3), ekin_trace
       real*8 stress(3,3)
 c
 c
@@ -46,8 +48,19 @@ c
 c
 c     set isotropic pressure to the average of tensor diagonal
 c
-      pres = (stress(1,1)+stress(2,2)+stress(3,3)) / 3.0d0
+c      pres = (stress(1,1)+stress(2,2)+stress(3,3)) / 3.0d0
 c
+c     compute pressure via numerical virial if necessary
+c
+       call dedvcalc()
+       if(kin_instant) then
+          ekin_trace=(ekin(1,1)+ekin(2,2)+ekin(3,3))/corr_fact_qtb
+          pres=prescon*(2.0d0*ekin_trace/(3.d0*volbox)-dedv)
+       else
+          pres=prescon*(nfree*kelvin*gasconst/(3.d0*volbox)-dedv)
+       endif
+
+
 c     use either the Berendsen or Monte Carlo barostat method
 c
       if (isobaric) then
@@ -206,6 +219,158 @@ c
       aextvol = 0d0
       return
       end
+c
+c
+c     #################################################################
+c     ##                                                             ##
+c     ##  subroutine dedvcalc  --  find virial tensor via finite
+c                                                        difference  ##
+c     ##                                                             ##
+c     #################################################################
+c
+c
+      subroutine dedvcalc()
+      use atoms
+      use bath
+      use bound
+      use boxes
+      use domdec
+      use iounit
+      use units
+      use virial
+      implicit none
+      integer i,iglob
+      real*8 energy,third
+      real*8 delta,step,scale
+      real*8 pres
+      real*8 vold,xboxold
+      real*8 yboxold,zboxold
+      real*8 epos,eneg
+      real*8, allocatable :: xoldloc(:)
+      real*8, allocatable :: yoldloc(:)
+      real*8, allocatable :: zoldloc(:)
+
+      !write(*,*)'Im in'
+c
+c
+c     set relative volume change for finite-differences
+c
+      if (.not. use_bounds)  return
+      
+      if(virnum) then
+        delta = 0.000001d0
+        step = volbox * delta
+c
+c     perform dynamic allocation of some local arrays
+c
+        allocate (xoldloc(n))
+        allocate (yoldloc(n))
+        allocate (zoldloc(n))
+c
+c     store original box dimensions and coordinate values
+c
+        xboxold = xbox
+        yboxold = ybox
+        zboxold = zbox
+        vold = volbox
+        do i = 1, nbloc
+           iglob = glob(i)
+           xoldloc(iglob) = x(iglob)
+           yoldloc(iglob) = y(iglob)
+           zoldloc(iglob) = z(iglob)
+        end do
+c
+c     get scale factor to reflect a negative volume change
+c
+        volbox = vold - step
+        third = 1.0d0 / 3.0d0
+        scale = (volbox/vold)**third
+c
+c     set new box dimensions and coordinate values
+c
+        xbox = xboxold * scale
+        ybox = yboxold * scale
+        zbox = zboxold * scale
+        call lattice
+        do i = 1, nbloc
+           iglob = glob(i)
+           x(iglob) = xoldloc(iglob) * scale
+           y(iglob) = yoldloc(iglob) * scale
+           z(iglob) = zoldloc(iglob) * scale
+        end do
+c
+c     compute potential energy for negative volume change
+c
+        eneg = energy ()
+        call allreduceen(eneg)
+c
+c     get scale factor to reflect a positive volume change
+c
+        volbox = vold + step
+        third = 1.0d0 / 3.0d0
+        scale = (volbox/vold)**third
+c
+c     set new box dimensions and coordinate values
+c
+        xbox = xboxold * scale
+        ybox = yboxold * scale
+        zbox = zboxold * scale
+        call lattice
+        do i = 1, nbloc
+           iglob = glob(i)
+           x(iglob) = xoldloc(iglob) * scale
+           y(iglob) = yoldloc(iglob) * scale
+           z(iglob) = zoldloc(iglob) * scale
+        end do
+c
+c     compute potential energy for positive volume change
+c
+        epos = energy ()
+        call allreduceen(epos)
+c
+c     restore original box dimensions and coordinate values
+c
+        xbox = xboxold
+        ybox = yboxold
+        zbox = zboxold
+        call lattice
+        do i = 1, nbloc
+           iglob = glob(i)
+           x(iglob) = xoldloc(iglob)
+           y(iglob) = yoldloc(iglob)
+           z(iglob) = zoldloc(iglob)
+        end do
+c
+c     perform deallocation of some local arrays
+c
+        deallocate (xoldloc)
+        deallocate (yoldloc)
+        deallocate (zoldloc)
+c
+c     get virial and finite difference values of dE/dV
+c
+        dedv = (epos-eneg) / (2.0d0*step)
+      else
+        dedv = (vir(1,1)+vir(2,2)+vir(3,3)) / (3.0d0*volbox)
+      endif
+      
+      !write(*,*) dedv
+c
+c
+c     compute analytical and finite-difference isotropic pressure
+c
+c      pres_vir = prescon * (dble(n)*gasconst*kelvin/volbox-dedv_vir)
+c      pres= prescon * (dble(n)*gasconst*kelvin/volbox-dedv_fd)
+c
+c     for 4site water model
+c
+!      pres_vir = prescon * (dble(n-n/4)*gasconst*kelvin/volbox-dedv_vir)
+!      pres= prescon * (dble(n-n/4)*gasconst*kelvin/volbox-dedv_fd)
+c      write(*,*) 'pres=', pres, pres_vir,dble(n-n/4)
+      return
+      end
+c
+
 c
 c
 c
