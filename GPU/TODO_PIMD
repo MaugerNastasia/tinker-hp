@@ -5,11 +5,11 @@ TODO LIST FOR PIMD IMPLEMENTATION
 - redefine COMM_TINKER (like COMM_BEAD in CPU implementation)
 - rename new modules to MOD_*.f
 - port baoabpi to GPU 
-    - derivs only on GPU
+    - derivs only on GPU (check when it is created on GPU -> mdinit)
     - check where are the energies (transfer to pi variables)
     - barostat ?
 - check if mdstatpi has access to everything on CPU
-- prtdynbeads / prtxyzbeads ?
+- prtdynbeads / mdsavebeads (very few modifications needed)
 
 2) OPTIMIZATION
 
