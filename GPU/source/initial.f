@@ -18,6 +18,7 @@ c
       subroutine initial
       use atoms
       use bath
+      use beads
       use bound
       use cell
       use deriv
@@ -53,6 +54,8 @@ c
 c
 c     cores, thread count and options for OpenMP
 c
+      nbeads = 1
+      nbeads_ctr = 0
       nproc = 1
       nthread = 1
 c     call omp_set_num_threads (nthread)
@@ -183,24 +186,21 @@ c
       use domdec
       use inform
       use mpi
+      use beads
       implicit none
-      integer ierr,iproc,rank_beadloc
-
-      integer, allocatable :: bead_rank(:)
+      integer ierr,iproc
 c
       allocate (bead_rank(nproctot))
 c
-c     not dealing with replicas for now
+c     if nbeads > 1, nproc is defined earlier (in pimd.f)
+c     else, we specify that we use standard parallelization (nproc=nproctot)
 c
-      nproc = nproctot
-      bead_rank = 0
+      if(nbeads==1) nproc=nproctot
+      rank_beadloc = int(ranktot/nproc)
+      ncomm = int(nproctot/nproc)
+      if ((ncomm-nproc*nproctot).gt.0) ncomm = ncomm+1
 c
-      do iproc = 0, nproctot-1
-        rank_beadloc = int(iproc/nproc)
-        bead_rank(iproc+1) = rank_beadloc
-      end do
-
-      CALL MPI_Comm_split(MPI_COMM_WORLD,bead_rank(ranktot+1),
+      CALL MPI_Comm_split(MPI_COMM_WORLD,rank_beadloc,
      $     ranktot,COMM_TINKER,ierr)
 
       call MPI_COMM_SIZE(COMM_TINKER,nproc,ierr)
@@ -219,7 +219,7 @@ c
 c     Initialize GPU
 c
       subroutine initDevice
-      use domdec ,only: rank,hostcomm
+      use domdec ,only: rank,ranktot,hostcomm
       use energi
       use inter  ,only: einter
       use inform
@@ -255,7 +255,7 @@ c
 c     For Mpi debug purpose
 c
       if (btest(tinkerdebug,tindGdb)) then
-         if (rank.eq.0) then
+         if (ranktot.eq.0) then
             print*
             write(*,*) "*** Enabled Debug with [cuda-]Gdb ***"
             i = 0

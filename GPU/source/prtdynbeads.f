@@ -15,8 +15,9 @@ c     molecular dynamics trajectory to an external disk file while
 c     using PIMD
 c
 c
+#include "tinker_precision.h"
       subroutine prtdynbeads
-      use atoms
+      use atomsMirror
       use beads
       use boxes
       use files
@@ -25,15 +26,17 @@ c
       use moldyn
       use titles
       use beads
+      use timestat ,only:timer_io,timer_enter,timer_exit,quiet_timers
       implicit none
       integer i,idyn
       integer freeunit
       logical exist
       character*2 atmc
-      character*39 fstr
+      character*40 fstr
       character*3 numberbeads
-      character*120 dynfile
+      character*240 dynfile
 c
+      call timer_enter(timer_io)
 c
 c     update an existing restart file or open a new one
 c
@@ -102,5 +105,5 @@ c
 c     close the dynamics trajectory restart file
 c
       close (unit=idyn)
-      return
+      call timer_exit(timer_io)
       end

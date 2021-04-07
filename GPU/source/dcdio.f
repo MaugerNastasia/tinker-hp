@@ -8,7 +8,7 @@ c     to an external disk file in the dcd format
 c     based on libdcdfort: https://github.com/wesbarnett/dcdfort
 c
 #include "tinker_precision.h"
-      subroutine dcdio_write(istep,dt)
+      subroutine dcdio_write(istep,dt,suffix)
       use atmtyp
       use atomsMirror
       use boxes
@@ -17,6 +17,7 @@ c
       use inform
       use iso_c_binding, only: C_NULL_CHAR
       implicit none
+      character(*), intent(in) :: suffix
       integer i,j,k,istep
       integer freeunit
       integer(kind=4) :: coord_size
@@ -28,12 +29,13 @@ c
       character (len=79) :: info1,info2
       character (len=8) :: date
       character (len=10) :: time
+      character (len=3) :: numberbeads
 
       natoms     = n
       coord_size = 4*natoms
       timestep   = istep
 
-      dcdfile    = filename(1:leng)//'.dcd'
+      dcdfile    = filename(1:leng)//suffix//'.dcd'
       init       = (istep.eq.iwrite)
 c
       if (init) then

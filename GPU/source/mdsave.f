@@ -330,7 +330,7 @@ c
 c     save coordinates to an archive or numbered structure file, or dcd file
 c
       if (dcdio) then
-        call dcdio_write(istep,dt)
+        call dcdio_write(istep,dt,'')
       else
         ixyz = freeunit ()
         if (archive) then

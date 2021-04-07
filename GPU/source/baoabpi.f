@@ -105,7 +105,7 @@ c
 c     MPI : get total energy (and allreduce the virial)
 c
       call reduceen(epotpi_loc)
-      call MPI_BCAST(epotpi_loc,1,MPI_REAL8,0,COMM_BEAD,ierr)
+      call MPI_BCAST(epotpi_loc,1,MPI_REAL8,0,COMM_TINKER,ierr)
 c
 c     communicate forces
 c
@@ -368,7 +368,7 @@ c         langevin piston (full step)
       
       call gradslow(einterpi_loc,derivs)      
       call reduceen(einterpi_loc)
-      call MPI_BCAST(einterpi_loc,1,MPI_REAL8,0,COMM_BEAD,ierr)
+      call MPI_BCAST(einterpi_loc,1,MPI_REAL8,0,COMM_TINKER,ierr)
 
       call commforcesrespa(derivs,.false.)
       !write(0,*) einterpi_loc

@@ -18,7 +18,7 @@ c
 c
       subroutine mdsavebeads (istep,dt)
       use atmtyp
-      use atoms
+      use atomsMirror
       use beads
       use bound
       use boxes
@@ -38,7 +38,7 @@ c
       use mpi
       implicit none
       integer, intent(in) :: istep
-      real*8, intent(in) :: dt
+      real(r_p), intent(in) :: dt
       integer i,j,k,iloc
       integer nprocloc,count
       integer ixyz,iind
@@ -46,20 +46,20 @@ c
       integer iend1,idump,lext
       integer freeunit,trimtext
       integer moddump
-      real*8 pico,wt
-      real*8, allocatable :: vtemp(:,:),postemp(:,:),atemp(:,:)
-      real*8, allocatable :: aalttemp(:,:)
+      real(r_p) pico,wt
+      real(r_p), allocatable :: vtemp(:,:),postemp(:,:),atemp(:,:)
+      real(r_p), allocatable :: aalttemp(:,:)
       integer, allocatable :: bufbegsave(:),globsave(:)
       integer req(nproc*nproc)
       integer iproc,ierr
       integer tagmpi,iglob,status(MPI_STATUS_SIZE)
       logical exist
       character*7 ext
-      character*120 endfile
-      character*120 xyzfile
-      character*120 velfile
-      character*120 frcfile
-      character*120 indfile
+      character*240 endfile
+      character*240 xyzfile
+      character*240 velfile
+      character*240 frcfile
+      character*240 indfile
       character*3 numberbeads
 c
       moddump = mod(istep,iwrite)
@@ -72,27 +72,28 @@ c     wrap coordinates in unit cell
 c
 c      call molecule(.false.)
 c      if (use_bounds) call bounds
+!$acc update host(v,a,x,y,z,aalt) async
 c
 c      allocate temporary arrays
 c
       if (rank.ne.0) then
         allocate (postemp(3,nloc))
-        postemp = 0d0
+        postemp = 0_re_p
         allocate (vtemp(3,nloc))
-        vtemp = 0d0
+        vtemp = 0_re_p
         allocate (atemp(3,nloc))
-        atemp = 0d0
+        atemp = 0_re_p
         allocate (aalttemp(3,nloc))
-        aalttemp = 0d0
+        aalttemp = 0_re_p
       else
         allocate (postemp(3,n))
-        postemp = 0d0
+        postemp = 0_re_p
         allocate (vtemp(3,n))
-        vtemp = 0d0
+        vtemp = 0_re_p
         allocate (atemp(3,n))
-        atemp = 0d0
+        atemp = 0_re_p
         allocate (aalttemp(3,n))
-        aalttemp = 0d0
+        aalttemp = 0_re_p
         allocate (bufbegsave(nproc))
         bufbegsave = 0
         allocate (globsave(n))
@@ -101,6 +102,7 @@ c
 c
 c     put the arrays to be sent in the right order
 c
+!$acc wait
       if (rank.ne.0) then
         do i = 1, nloc
           iglob = glob(i)
@@ -125,7 +127,7 @@ c
         do iproc = 1, nproc-1
           tagmpi = iproc + 1
           call MPI_IRECV(domlen(iproc+1),1,MPI_INT,iproc,tagmpi,
-     $     COMM_BEAD,req(tagmpi),ierr)
+     $     COMM_TINKER,req(tagmpi),ierr)
         end do
         do iproc = 1, nproc-1
           tagmpi = iproc + 1
@@ -134,7 +136,7 @@ c
       else
         tagmpi = rank + 1
         call MPI_ISEND(domlen(rank+1),1,MPI_INT,0,tagmpi,
-     $   COMM_BEAD,req(tagmpi),ierr)
+     $   COMM_TINKER,req(tagmpi),ierr)
         call MPI_WAIT(req(tagmpi),status,ierr)
       end if
 c
@@ -154,7 +156,7 @@ c
         do iproc = 1, nproc-1
           tagmpi = iproc + 1
           call MPI_IRECV(globsave(bufbegsave(iproc+1)),domlen(iproc+1),
-     $     MPI_INT,iproc,tagmpi,COMM_BEAD,req(tagmpi),ierr)
+     $     MPI_INT,iproc,tagmpi,COMM_TINKER,req(tagmpi),ierr)
         end do
         do iproc = 1, nproc-1
           tagmpi = nproc*rank + iproc + 1
@@ -163,7 +165,7 @@ c
       else
         tagmpi = rank + 1
         call MPI_ISEND(glob,domlen(rank+1),MPI_INT,0,
-     $   tagmpi,COMM_BEAD,req(tagmpi),ierr)
+     $   tagmpi,COMM_TINKER,req(tagmpi),ierr)
         call MPI_WAIT(req(tagmpi),status,ierr)
       end if
 c
@@ -174,12 +176,12 @@ c
           tagmpi = iproc + 1
           call MPI_IRECV(postemp(1,bufbegsave(iproc+1)),
      $     3*domlen(iproc+1),
-     $     MPI_REAL8,iproc,tagmpi,COMM_BEAD,req(tagmpi),ierr)
+     $     MPI_RPREC,iproc,tagmpi,COMM_TINKER,req(tagmpi),ierr)
         end do
       else
         tagmpi = rank + 1
-        call MPI_ISEND(postemp,3*nloc,MPI_REAL8,0,tagmpi,
-     $  COMM_BEAD,req(tagmpi),ierr)
+        call MPI_ISEND(postemp,3*nloc,MPI_RPREC,0,tagmpi,
+     $  COMM_TINKER,req(tagmpi),ierr)
       end if
       if (rank.eq.0) then
         do iproc = 1, nproc-1
@@ -194,11 +196,11 @@ c
         do iproc = 1, nproc-1
           tagmpi = iproc + 1
           call MPI_IRECV(vtemp(1,bufbegsave(iproc+1)),3*domlen(iproc+1),
-     $     MPI_REAL8,iproc,tagmpi,COMM_BEAD,req(tagmpi),ierr)
+     $     MPI_RPREC,iproc,tagmpi,COMM_TINKER,req(tagmpi),ierr)
         end do
       else
         tagmpi = rank + 1
-        call MPI_ISEND(vtemp,3*nloc,MPI_REAL8,0,tagmpi,COMM_BEAD,
+        call MPI_ISEND(vtemp,3*nloc,MPI_RPREC,0,tagmpi,COMM_TINKER,
      $  req(tagmpi),ierr)
       end if
       if (rank.eq.0) then
@@ -214,11 +216,11 @@ c
         do iproc = 1, nproc-1
           tagmpi = iproc + 1
           call MPI_IRECV(atemp(1,bufbegsave(iproc+1)),3*domlen(iproc+1),
-     $     MPI_REAL8,iproc,tagmpi,COMM_BEAD,req(tagmpi),ierr)
+     $     MPI_RPREC,iproc,tagmpi,COMM_TINKER,req(tagmpi),ierr)
         end do
       else
         tagmpi = rank + 1
-        call MPI_ISEND(atemp,3*nloc,MPI_REAL8,0,tagmpi,COMM_BEAD,
+        call MPI_ISEND(atemp,3*nloc,MPI_RPREC,0,tagmpi,COMM_TINKER,
      $  req(tagmpi),ierr)
       end if
       if (rank.eq.0) then
@@ -235,12 +237,12 @@ c
           tagmpi = iproc + 1
           call MPI_IRECV(aalttemp(1,bufbegsave(iproc+1)),
      $     3*domlen(iproc+1)
-     $     ,MPI_REAL8,iproc,tagmpi,COMM_BEAD,req(tagmpi),ierr)
+     $     ,MPI_RPREC,iproc,tagmpi,COMM_TINKER,req(tagmpi),ierr)
         end do
       else
         tagmpi = rank + 1
-        call MPI_ISEND(aalttemp,3*nloc,MPI_REAL8,0,tagmpi,
-     $   COMM_BEAD,req(tagmpi),ierr)
+        call MPI_ISEND(aalttemp,3*nloc,MPI_RPREC,0,tagmpi,
+     $   COMM_TINKER,req(tagmpi),ierr)
       end if
       if (rank.eq.0) then
         do iproc = 1, nproc-1
@@ -280,75 +282,8 @@ c
             end if
           end do
         end do
-cc
-cc       put the system back in the unit cell before writing frame
-cc
-c        if (use_bounds) call bounds
       end if
       deallocate (postemp)
-cc
-cc     The master broadcasts the system (back in the unit cell)
-cc
-c      if (rank.eq.0) then
-c        do iproc = 1, nproc-1
-c          tagmpi = iproc + 1
-c          call MPI_ISEND(x,n,MPI_REAL8,iproc,tagmpi,COMM_BEAD,
-c     $    req(tagmpi),ierr)
-c        end do
-c      else
-c        tagmpi = rank + 1
-c          call MPI_IRECV(x,n,
-c     $     MPI_REAL8,0,tagmpi,COMM_BEAD,req(tagmpi),ierr)
-c      end if
-c      if (rank.eq.0) then
-c        do iproc = 1, nproc-1
-c          tagmpi = iproc + 1
-c          call MPI_WAIT(req(tagmpi),status,ierr)
-c        end do
-c      else
-c        tagmpi = rank + 1
-c        call MPI_WAIT(req(tagmpi),status,ierr)
-c      end if
-c      if (rank.eq.0) then
-c        do iproc = 1, nproc-1
-c          tagmpi = iproc + 1
-c          call MPI_ISEND(y,n,MPI_REAL8,iproc,tagmpi,COMM_BEAD,
-c     $    req(tagmpi),ierr)
-c        end do
-c      else
-c        tagmpi = rank + 1
-c          call MPI_IRECV(y,n,
-c     $     MPI_REAL8,0,tagmpi,COMM_BEAD,req(tagmpi),ierr)
-c      end if
-c      if (rank.eq.0) then
-c        do iproc = 1, nproc-1
-c          tagmpi = iproc + 1
-c          call MPI_WAIT(req(tagmpi),status,ierr)
-c        end do
-c      else
-c        tagmpi = rank + 1
-c        call MPI_WAIT(req(tagmpi),status,ierr)
-c      end if
-c      if (rank.eq.0) then
-c        do iproc = 1, nproc-1
-c          tagmpi = iproc + 1
-c          call MPI_ISEND(z,n,MPI_REAL8,iproc,tagmpi,COMM_BEAD,
-c     $    req(tagmpi),ierr)
-c        end do
-c      else
-c        tagmpi = rank + 1
-c          call MPI_IRECV(z,n,
-c     $     MPI_REAL8,0,tagmpi,COMM_BEAD,req(tagmpi),ierr)
-c      end if
-c      if (rank.eq.0) then
-c        do iproc = 1, nproc-1
-c          tagmpi = iproc + 1
-c          call MPI_WAIT(req(tagmpi),status,ierr)
-c        end do
-c      else
-c        tagmpi = rank + 1
-c        call MPI_WAIT(req(tagmpi),status,ierr)
-c      end if
 c
       deallocate (vtemp)
       deallocate (atemp)
@@ -388,8 +323,11 @@ c     save coordinates to an archive or numbered structure file
 c
       write(numberbeads, '(i3.3)') ibead_loaded_glob
       !write(*,*) 'globead=' ,globbead(ibeadsloc), 'ranktot=',ranktot
-      ixyz = freeunit ()
-      if (archive) then
+      if (dcdio) then
+        call dcdio_write(istep,dt,'_beads'//numberbeads)
+      else
+        ixyz = freeunit ()
+        if (archive) then
          xyzfile = filename(1:leng)//'_beads'//numberbeads
          call suffix (xyzfile,'arc','old')
          inquire (file=xyzfile,exist=exist)
@@ -398,16 +336,17 @@ c
          else
             open (unit=ixyz,file=xyzfile,status='new')
          end if
-      else
+        else
          xyzfile = filename(1:leng)//'_beads'//numberbeads
      &                        //'.'//ext(1:lext)
          call version (xyzfile,'new')
          open (unit=ixyz,file=xyzfile,status='new')
-      end if
-      call prtxyz (ixyz)
-      close (unit=ixyz)
-c      write (iout,70)  xyzfile(1:trimtext(xyzfile))
+        end if
+        call prtxyz (ixyz)
+        close (unit=ixyz)
+c       write (iout,70)  xyzfile(1:trimtext(xyzfile))
 c   70 format (' Coordinate File',12x,a)
+      endif
 c     
 c     save the velocity vector components at the current step
 c
@@ -485,7 +424,7 @@ c
          write (iind,170)  n,title(1:ltitle)
   170    format (i6,2x,a)
          do i = 1, npole
-            if (polarity(i) .ne. 0.0d0) then
+            if (polarity(i) .ne. 0.0_ti_p) then
                k = ipole(i)
                write (iind,180)  k,name(k),(debye*uind(j,i),j=1,3)
   180          format (i6,2x,a3,3f12.6)
