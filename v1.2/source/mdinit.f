@@ -179,6 +179,18 @@ c
             read (string,*,err=10,end=10) ineigup
          else if (keyword(1:9) .eq. 'FRICTION ') then
             read (string,*,err=10,end=10) gamma
+         else if (keyword(1:9) .eq. 'OMEGACUT ') then
+            read (string,*,err=10,end=10) omegacut
+         else if (keyword(1:11) .eq. 'OMEGASMEAR ') then
+            read (string,*,err=10,end=10) omegasmear
+         else if (keyword(1:9) .eq. 'OMEGAMAX ') then
+            read (string,*,err=10,end=10) omegamax
+         else if (keyword(1:5) .eq. 'TSEG ') then
+            read (string,*,err=10,end=10) TSEG
+         else if (keyword(1:8) .eq. 'A_GAMMA ') then
+            read (string,*,err=10,end=10) a_gamma
+         else if (keyword(1:8) .eq. 'SKIPSEG ') then
+            read (string,*,err=10,end=10) skipseg
          else if (keyword(1:15) .eq. 'FRICTIONPISTON ') then
             read (string,*,err=10,end=10) gammapiston
          else if (keyword(1:12) .eq. 'MASSPISTON ') then

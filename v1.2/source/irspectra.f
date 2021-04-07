@@ -13,6 +13,7 @@
 c     subroutine irspectra: get the total dipole moment of the system (permanent+induced)
 
       subroutine irspectra
+      use adqtb
       use atmlst
       use atmtyp
       use atoms
@@ -31,7 +32,6 @@ c     subroutine irspectra: get the total dipole moment of the system (permanent
       use mpole
       use potent
       use qtb
-      use adqtb
       use timestat
       use usage
       use units
@@ -66,11 +66,13 @@ c      integer iloc3,iloc2,iloc1
       mudot(:,:)=0d0
 
       if(compteur.le.startsavespec) then
-        Cmumu_average=0d0
+        if (allocated(Cmumu_average)) deallocate (Cmumu_average)
+         allocate(Cmumu_average(3,0:nad-1)) 
+        Cmumu_average(:,:)=0d0
       endif
 
       open(12,file='IR_spectra_decomposed.out')
-      open(13,file='IR_spectra.out')
+      open(13,file='IR_spectra_test.out')
       
       
       do i=1,nloc
@@ -94,12 +96,11 @@ c              vtot(3,i,:)=oterm*vad(3,iloc3,:)+hterm*vad(3,iloc2
 c     &                        ,:)+hterm*vad(3,iloc1,:) 
 c           enddo
           if (use(iglob)) then 
-            vtot(1,i,:)=vad(1,i,:)
-            vtot(2,i,:)=vad(2,i,:)
-            vtot(3,i,:)=vad(3,i,:)
-            write(74,*) vad(3,1,:)
-            write(75,*) vtot(3,1,:)
-          endif
+            vtot(:,i,:)=vad(:,i,:)
+c            vtot(1,i,:)=vad(1,i,:)
+c            vtot(2,i,:)=vad(2,i,:)
+c            vtot(3,i,:)=vad(3,i,:)
+c          endif
   10      continue
       enddo
 
