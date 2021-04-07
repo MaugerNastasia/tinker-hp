@@ -18,7 +18,7 @@ c     subroutine irspectra: get the total dipole moment of the system (permanent
       use atmtyp
       use atoms
       use bath
-      use boxes, only: volbox
+      use boxes
       use charge
       use cutoff
       use domdec
@@ -41,7 +41,7 @@ c     subroutine irspectra: get the total dipole moment of the system (permanent
       integer iglob,iipole,iichg
 c      integer iloc3,iloc2,iloc1
       integer imolcul,jglob,k
-      real*8 oterm,hterm,q,beta,k_b
+      real*8 oterm,hterm,q,beta_planck
       real*8, allocatable ::  vtot(:,:,:)
       real*8, allocatable :: Cmumu(:,:)
       real*8, allocatable ::  mudot(:,:)
@@ -53,8 +53,7 @@ c      integer iloc3,iloc2,iloc1
 
       s=3*nseg
       est=1
-      k_b=boltzmann
-      beta=1./(k_b/convert*kelvin)
+      beta_planck=1./(boltzmann/convert*kelvin)
 
       allocate(vtot(3,nloc,nseg))
       vtot = 0d0
@@ -100,7 +99,7 @@ c           enddo
 c            vtot(1,i,:)=vad(1,i,:)
 c            vtot(2,i,:)=vad(2,i,:)
 c            vtot(3,i,:)=vad(3,i,:)
-c          endif
+          endif
   10      continue
       enddo
 
@@ -159,7 +158,7 @@ c          endif
         
          write(12,'(4e20.5)')0,Cmumu_average(:,0)
      &                /max(compteur-startsavespec+1,1)
-         write(13,*) 0, ((pi*beta)/(3*lightspd*volbox))
+         write(13,*) 0, ((pi*beta_planck)/(3*lightspd*volbox))
      &                *(Cmumu_average(1,0)
      &                +Cmumu_average(2,0)
      &                +Cmumu_average(3,0))
@@ -167,9 +166,9 @@ c          endif
         do i=1,nad-1
          write(12,'(4e20.5)')domega*i,Cmumu_average(:,i)
      &                /max(compteur-startsavespec+1,1)
-         write(13,*) domega*i, ((pi*beta)/(3*lightspd*volbox))
-     &                *tanh(beta*hbar_planck*(domega*i)/2.)
-     &                /(beta*hbar_planck*(domega*i)/2.)
+         write(13,*) domega*i, ((pi*beta_planck)/(3*lightspd*volbox))
+     &                *tanh(beta_planck*hbar_planck*(domega*i)/2.)
+     &                /(beta_planck*hbar_planck*(domega*i)/2.)
      &                *(Cmumu_average(1,i)
      &                +Cmumu_average(2,i)
      &                +Cmumu_average(3,i))

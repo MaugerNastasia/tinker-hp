@@ -42,7 +42,6 @@
       real*8  theta_tilde
       real*8 dt
       real*8 h
-      real*8 k_b                          !bolzmann in good units
       real*8 omega
       real*8 t
       real*8 normal
@@ -51,7 +50,6 @@
 !     constant in Kcal/mol and ps
 !
       !hbar=(planck*1.d11*avogadro)/(2*pi)
-      k_b=boltzmann
      
 !     Arguments
 !
@@ -67,16 +65,18 @@ c      open(1,file='H_omegaad.out')
         do k=0,(3*nseg)/2
           omega=k*domega
             if  (k .eq.0) then
-              Htilde(k,i)=sqrt(k_b*kelvin*(1.0d0+corr_pot_ratio(k)))
+              Htilde(k,i)=sqrt(boltzmann*kelvin*
+     &                    (1.0d0+corr_pot_ratio(k)))
      &                    *gamma_type(k,i)/gamma
             else if (noQTB) then
-              Htilde(k,i)=sqrt(k_b*kelvin)
-              Htilde(3*nseg-k,i)=sqrt(k_b*kelvin)
+              Htilde(k,i)=sqrt(boltzmann*kelvin)
+              Htilde(3*nseg-k,i)=sqrt(boltzmann*kelvin)
             else
               C_omega=(1-2*exp(-gamma*dt)*cos(omega*dt)+exp(-2*gamma*dt)
      &                )/((gamma**2+omega**2)*dt**2)
               theta_tilde=hbar_planck*abs(omega)*(1.0/2.0+1.0
-     &                   /(exp(hbar_planck*abs(omega)/(k_b*kelvin))-1))
+     &                   /(exp(hbar_planck*abs(omega)
+     &                   /(boltzmann*kelvin))-1))
               f_omega=1.0/(1+exp((abs(omega)-omegacut)/omegasmear))
               g_ratio=1.
               if(k.lt.nad-1) then
