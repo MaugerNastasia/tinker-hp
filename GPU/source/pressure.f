@@ -579,8 +579,8 @@ c
 !$acc update host(epot)
          end if
          if (deb_Energy.or.deb_Force) then
-            if(rank.eq.0) write(*,*) 'montecarlo energy'
-            call info_energy(rank)
+            if(ranktot.eq.0) write(*,*) 'montecarlo energy'
+            call info_energy(ranktot)
          end if
 
          dpot = epot - eold
@@ -670,3 +670,190 @@ c
          deallocate (vold)
       end if
       end
+
+
+      subroutine dedvcalc()
+      use atmlst
+      use atmtyp
+      use atomsMirror
+      use bath
+      use boxes
+      use bound
+      use domdec
+      use energi
+      use group
+      use math
+      use mdstuf
+      use molcul
+      use moldyn
+      use inform     ,only: deb_Path,deb_Energy,deb_Force,verbose
+      use random_mod
+      use units
+      use usage
+      use mpi
+      use virial
+      implicit none
+      integer i,iglob
+      real(r_p) third
+      real(r_p) delta,step,scale
+      real(r_p) pres
+      real(r_p) vold,xboxold
+      real(r_p) yboxold,zboxold
+      real(r_p) epos,eneg
+      real(r_p), allocatable :: xoldloc(:)
+      real(r_p), allocatable :: yoldloc(:)
+      real(r_p), allocatable :: zoldloc(:)
+      interface 
+        function energy ()
+        real(r_p) energy
+        end function
+      end interface
+
+c
+c
+c     set relative volume change for finite-differences
+c
+      if (.not. use_bounds)  return
+      
+      if(virnum) then
+        delta = 0.000001d0
+        step = volbox * delta
+c
+c     perform dynamic allocation of some local arrays
+c
+        allocate (xoldloc(n))
+        allocate (yoldloc(n))
+        allocate (zoldloc(n))
+!$acc data create(xoldloc,yoldloc,zoldloc,epos,eneg)
+!$acc&     present(x,y,z,v,glob,mass,molmass,kmol,use,imol) async
+c
+c     store original box dimensions and coordinate values
+c
+        xboxold = xbox
+        yboxold = ybox
+        zboxold = zbox
+        vold = volbox
+!$acc parallel loop async
+        do i = 1, nbloc
+          iglob = glob(i)
+          if (use(iglob)) then
+            xoldloc(iglob) = x(iglob)
+            yoldloc(iglob) = y(iglob)
+            zoldloc(iglob) = z(iglob)
+          end if
+        end do
+c
+c     get scale factor to reflect a negative volume change
+c
+        volbox = vold - step
+        third = 1.0d0 / 3.0d0
+        scale = (volbox/vold)**third
+c
+c     set new box dimensions and coordinate values
+c
+        xbox = xboxold * scale
+        ybox = yboxold * scale
+        zbox = zboxold * scale
+!$acc update device(volbox,xbox,ybox,zbox) async
+        call lattice
+!$acc wait
+!$acc parallel loop async
+        do i = 1, nbloc
+           iglob = glob(i)
+           x(iglob) = xoldloc(iglob) * scale
+           y(iglob) = yoldloc(iglob) * scale
+           z(iglob) = zoldloc(iglob) * scale
+        end do
+!$acc wait
+        call reCast_position
+c
+c     compute potential energy for negative volume change
+c
+        eneg = energy ()
+!$acc update device(eneg)
+        if (nproc.gt.1) then
+          call allreduceen(eneg)
+!$acc update host(eneg)
+        end if
+c
+c     get scale factor to reflect a positive volume change
+c
+        volbox = vold + step
+        third = 1.0d0 / 3.0d0
+        scale = (volbox/vold)**third
+c
+c     set new box dimensions and coordinate values
+c
+        xbox = xboxold * scale
+        ybox = yboxold * scale
+        zbox = zboxold * scale
+!$acc update device(volbox,xbox,ybox,zbox) async
+        call lattice
+!$acc wait
+!$acc parallel loop async
+        do i = 1, nbloc
+           iglob = glob(i)
+           x(iglob) = xoldloc(iglob) * scale
+           y(iglob) = yoldloc(iglob) * scale
+           z(iglob) = zoldloc(iglob) * scale
+        end do
+!$acc wait
+        call reCast_position
+c
+c     compute potential energy for positive volume change
+c
+        epos = energy ()
+!$acc update device(epos)
+        if (nproc.gt.1) then
+          call allreduceen(epos)
+!$acc update host(epos)
+        end if
+c
+c     restore original box dimensions and coordinate values
+c
+        xbox = xboxold
+        ybox = yboxold
+        zbox = zboxold
+        volbox = vold
+!$acc update device(volbox,xbox,ybox,zbox) async
+        call lattice
+!$acc wait
+!$acc parallel loop async
+        do i = 1, nbloc
+           iglob = glob(i)
+           x(iglob) = xoldloc(iglob)
+           y(iglob) = yoldloc(iglob)
+           z(iglob) = zoldloc(iglob)
+        end do
+!$acc wait
+!$acc end data
+c
+c     perform deallocation of some local arrays
+c
+        deallocate (xoldloc)
+        deallocate (yoldloc)
+        deallocate (zoldloc)
+c
+c     get virial and finite difference values of dE/dV
+c
+        dedv = (epos-eneg) / (2.0d0*step)
+      else
+        dedv = (vir(1,1)+vir(2,2)+vir(3,3)) / (3.0d0*volbox)
+      endif
+      
+      !write(*,*) dedv
+c
+c
+c     compute analytical and finite-difference isotropic pressure
+c
+c      pres_vir = prescon * (dble(n)*gasconst*kelvin/volbox-dedv_vir)
+c      pres= prescon * (dble(n)*gasconst*kelvin/volbox-dedv_fd)
+c
+c     for 4site water model
+c
+!      pres_vir = prescon * (dble(n-n/4)*gasconst*kelvin/volbox-dedv_vir)
+!      pres= prescon * (dble(n-n/4)*gasconst*kelvin/volbox-dedv_fd)
+c      write(*,*) 'pres=', pres, pres_vir,dble(n-n/4)
+      return
+      end subroutine dedvcalc
+

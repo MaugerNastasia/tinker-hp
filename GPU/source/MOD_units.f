@@ -65,6 +65,7 @@ c
       real(r_p) evolt,efreq
       real(r_p) coulomb,debye
       real(r_p) prescon
+      real(r_p) hbar
       parameter (avogadro = 6.02214129d+23)
       parameter (lightspd = 2.99792458d-2)
       parameter (boltzmann= 0.831446215_re_p)
@@ -80,5 +81,6 @@ c
       parameter (coulomb  = 332.063714_re_p)
       parameter (debye    = 4.80321_re_p)
       parameter (prescon  = 6.85684112d+4)
+      parameter (hbar=(planck*1.d11*avogadro)/(2d0*acos(-1.d0)))
       save
       end

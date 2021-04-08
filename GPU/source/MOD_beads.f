@@ -174,7 +174,7 @@ c
         integer :: nblocrec,nlocnl
         integer :: nblocrecdir
         integer, allocatable :: glob(:),loc(:),repart(:)
-        integer, allocatable :: ineignl(:),locnl(:)
+        integer, allocatable :: ineignl(:) !,locnl(:)
         integer, allocatable :: repartrec(:), domlen(:)
         integer, allocatable :: domlenrec(:),domlenpole(:)
         integer, allocatable :: domlenpolerec(:),globrec(:)
@@ -435,6 +435,20 @@ c
       end subroutine allocpi
 
       subroutine allocbead(bead)
+      use angle
+      use atoms
+      use bath
+      use bitor
+      use domdec
+      use molcul
+      use neigh
+      use sizes
+      use pitors
+      use potent
+      use tors
+      use uprior
+      use units
+      use mdstuf
       implicit none
       TYPE(BEAD_TYPE), intent(inout) :: bead
 
@@ -470,7 +484,7 @@ c
       allocate(bead%bufbeg2(nproc))
       allocate(bead%molculeglob(nmol))
       allocate(bead%ineignl(n))
-      allocate(bead%locnl(n))      
+      !allocate(bead%locnl(n))      
 
 
       if (use_vdw) then
@@ -585,7 +599,7 @@ c
         if (allocated(bead%bufbeg2)) deallocate(bead%bufbeg2)
         if (allocated(bead%molculeglob)) deallocate(bead%molculeglob)
         if (allocated(bead%ineignl)) deallocate(bead%ineignl)
-        if (allocated(bead%locnl)) deallocate(bead%locnl)
+        !if (allocated(bead%locnl)) deallocate(bead%locnl)
         if (allocated(bead%vdwglob)) deallocate(bead%vdwglob)
         if (allocated(bead%vdwglobnl)) deallocate(bead%vdwglobnl)
         if (allocated(bead%bndglob)) deallocate(bead%bndglob)
@@ -666,12 +680,17 @@ c
       bead%v = v
       bead%a = a
 
+!$acc update host(eksumpi_loc,ekinpi_loc) async
       if(contract) then
+!$acc update host(eintrapi_loc,einterpi_loc) async
+!$acc wait
         bead%eintra=eintrapi_loc
         bead%einter=einterpi_loc
         bead%epot=eintrapi_loc+einterpi_loc
         bead%etot=eintrapi_loc+einterpi_loc+eksumpi_loc
       else
+!$acc update host(epotpi_loc) async
+!$acc wait
         bead%epot=epotpi_loc
         bead%etot=epotpi_loc+eksumpi_loc
       endif
@@ -681,7 +700,7 @@ c
       bead%dedv = dedv
 
       if(updateGPU) then
-!$acc update host(nloc,glob(:))
+!$acc update host(glob(:))
       endif
       bead%nloc = nloc
       bead%glob = glob
@@ -709,9 +728,6 @@ c
 c
 c     parallelism
 c
-      if(updateGPU) then
-!$acc update host(nbloc,nlocrec,nblocrec,nlocnl,nblocrecdir)
-      endif
       bead%nbloc = nbloc
       bead%nlocrec = nlocrec
       bead%nblocrec = nblocrec
@@ -719,18 +735,18 @@ c
       bead%nblocrecdir = nblocrecdir
 
       if(updateGPU) then
-!$acc update host(loc(:),ineignl(:),locnl(:)) async
-!$acc update host(repart(:),repartrec(:), domlen(:)) async
+!$acc update host(loc(:),ineignl(:)) async
+!$acc update host(repart(:),repartrec(:)) async
 !$acc update host(domlenrec(:),domlenpole(:),domlenpolerec(:)) async
 !$acc update host(globrec(:),locrec(:),globrec1(:),locrec1(:)) async
-!$acc update host(bufbegrec(:),bufbegpole(:),bufbeg(:)) async
-!$acc update host(buflen1(:),buflen2(:),buf1(:),buf2(:)) async
+!$acc update host(bufbegpole(:)) async
+!$acc update host(buflen2(:),buf1(:),buf2(:)) async
 !$acc update host(bufbeg1(:),bufbeg2(:)) async
 !$acc wait
       endif
       bead%loc = loc
       bead%ineignl = ineignl
-      bead%locnl = locnl
+      !bead%locnl = locnl
       bead%repart = repart
       bead%repartrec = repartrec
       bead%domlen = domlen
@@ -937,9 +953,8 @@ c     POLARIZATION
 c
       if (use_polar) then
         if(updateGPU) then
-!$acc update host(nualt) async
 !$acc update host(udalt(:,:,:),upalt(:,:,:)) async
-!$acc update host(uind(:,:,:),uinp(:,:,:)) async
+!$acc update host(uind(:,:),uinp(:,:)) async
 !$acc wait
         endif
         bead%nualt = nualt
@@ -1068,6 +1083,7 @@ c
       ibead_loaded_loc = bead%ibead_loc
 
       !write(0,*) "push energies"
+
       if(contract) then
         eintrapi_loc=bead%eintra
         einterpi_loc=bead%einter
@@ -1075,12 +1091,14 @@ c
         eksumpi_loc=bead%eksum
         ekinpi_loc=bead%ekin
         dedv=bead%dedv
+!$acc update device(eintrapi_loc,einterpi_loc) async
       else
         epotpi_loc=bead%epot
         eksumpi_loc=bead%eksum
         ekinpi_loc=bead%ekin
         dedv=bead%dedv
       endif
+!$acc update device(eksumpi_loc,ekinpi_loc,epotpi_loc) async
 
       !write(0,*) "push position"      
       x = bead%x
@@ -1095,7 +1113,7 @@ c
       nloc = bead%nloc
       glob = bead%glob
       if(updateGPU) then
-!$acc update device(nloc,glob(:)) async
+!$acc update device(glob(:)) async
       endif
 c
 c     STAT
@@ -1128,13 +1146,10 @@ c
       nblocrec = bead%nblocrec
       nlocnl = bead%nlocnl
       nblocrecdir = bead%nblocrecdir
-      if(updateGPU) then
-!$acc update device(nbloc,nlocrec,nblocrec,nlocnl,nblocrecdir) async
-      endif
 
       loc = bead%loc
       ineignl = bead%ineignl
-      locnl = bead%locnl
+      ! locnl = bead%locnl
       repart = bead%repart
       repartrec = bead%repartrec
       domlen = bead%domlen
@@ -1156,12 +1171,12 @@ c
       bufbeg2 = bead%bufbeg2
 
       if(updateGPU) then
-!$acc update device(loc(:),ineignl(:),locnl(:)) async
-!$acc update device(repart(:),repartrec(:), domlen(:)) async
+!$acc update device(loc(:),ineignl(:)) async
+!$acc update device(repart(:),repartrec(:)) async
 !$acc update device(domlenrec(:),domlenpole(:),domlenpolerec(:)) async
 !$acc update device(globrec(:),locrec(:),globrec1(:),locrec1(:)) async
-!$acc update device(bufbegrec(:),bufbegpole(:),bufbeg(:)) async
-!$acc update device(buflen1(:),buflen2(:),buf1(:),buf2(:)) async
+!$acc update device(bufbegpole(:)) async
+!$acc update device(buflen2(:),buf1(:),buf2(:)) async
 !$acc update device(bufbeg1(:),bufbeg2(:)) async
       endif
 
@@ -1377,9 +1392,8 @@ c
         uind = bead%uind
         uinp = bead%uinp
         if(updateGPU) then
-!$acc update device(nualt) async
 !$acc update device(udalt(:,:,:),upalt(:,:,:)) async
-!$acc update device(uind(:,:,:),uinp(:,:,:)) async
+!$acc update device(uind(:,:),uinp(:,:)) async
 !$acc wait
         endif
       endif
@@ -1567,8 +1581,7 @@ c       rescale box
 c
 c     propagate the new box dimensions to other lattice values
 c 
-        call lattice  
-        !call MPI_BARRIER(MPI_COMM_WORLD,ierr)   
+        call lattice   
         call ddpme3dnpt(scale,istep)
       end subroutine rescale_box_pi
 
@@ -1577,7 +1590,7 @@ c    COMMUNICATION ROUTINES
 
       subroutine prepare_loaded_bead (istep)
       use atmtyp
-      use atoms
+      use atomsMirror
       use cutoff
       use domdec
       use energi
@@ -1588,13 +1601,13 @@ c    COMMUNICATION ROUTINES
       use units
       use usage
       use mpi
-      use util4site
       implicit none
       integer, intent(in) :: istep
       real*8 time0,time1
       real*8 oterm,hterm
       integer :: i,iglob
 
+!$acc data  present(x,y,z,xold,yold,zold,v,a,mass,glob,use)
 
 c     Reassign the particules that have changed of domain
 c
@@ -1617,6 +1630,8 @@ c
       call commposrec
       time1 = mpi_wtime()
       timecommstep = timecommstep + time1 - time0
+
+      call reCast_position
 c
 c
       call reinitnl(istep)
@@ -1636,6 +1651,8 @@ c      write(*,*) 'istep 1 = ',istep
 
       !rebuild the neighbor lists
       if (use_list) call nblist(istep)
+
+!$acc end data
           
       end subroutine prepare_loaded_bead
 
@@ -2068,6 +2085,7 @@ c      CONTRACTION SUBROUTINES
       
 
       subroutine contract_polymer(polymer,polymer_ctr)
+        use atoms
         implicit none
         type(POLYMER_COMM_TYPE), intent(in) :: polymer
         type(POLYMER_COMM_TYPE), intent(inout) :: polymer_ctr
@@ -2093,6 +2111,7 @@ c      CONTRACTION SUBROUTINES
       end subroutine contract_polymer
 
       subroutine project_forces_contract(polymer,polymer_ctr)
+        use atoms
         implicit none
         type(POLYMER_COMM_TYPE),intent(inout) :: polymer
         type(POLYMER_COMM_TYPE),intent(in) :: polymer_ctr

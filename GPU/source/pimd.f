@@ -48,6 +48,9 @@ c
       use neigh
       use timestat
       use mpi
+      use utilgpu ,only: rec_queue
+      use tinMemory
+      use utils, only: set_to_zero2m
       implicit none
       integer i,istep,nstep,ierr,k,ibead,ibeadglob!,nstep_therm
       integer iglob
@@ -55,13 +58,13 @@ c
       real(r_p) dt,dtdump,time0,time1
       logical exist,query,restart
       character*20 keyword
-      character*120 record
-      character*120 string
+      character*240 record
+      character*240 string
       real(r_p) maxwell
       integer nbeads_para
 c
 c
- 1000 Format(' Time for 100 Steps: ',f15.4,/,
+ 1000 Format(' Time for ',I4,' Steps: ',f15.4,/,
      $  ' Ave. Time per step: ',f15.4)
  1010 Format(' ns per day: ',f15.4)
 c
@@ -83,7 +86,7 @@ c
         record = keyline(i)
         call gettext (record,keyword,next)
         call upcase (keyword)
-        string = record(next:120)
+        string = record(next:240)
         if (keyword(1:7) .eq. 'NBEADS ') then
           read (string,*,err=5,end=5) nbeads
         elseif (keyword(1:11) .eq. 'NBEADS_CTR ') then
@@ -163,8 +166,8 @@ c
 c
 c     initialize the temperature, pressure and coupling baths
 c
-      kelvin = 0.0_re_p
-      atmsph = 0.0_re_p
+      kelvin = 0.0
+      atmsph = 0.0
       isothermal = .false.
       isobaric = .false.
 c
@@ -176,7 +179,7 @@ c
          record = keyline(i)
          call gettext (record,keyword,next)
          call upcase (keyword)
-         string = record(next:120)
+         string = record(next:240)
          if (keyword(1:11) .eq. 'INTEGRATOR ') then
             call getword (record,integrate,next)
             call upcase (integrate)
@@ -215,20 +218,20 @@ c
 c
 c     get the length of the dynamics time step in picoseconds
 c
-      dt = -1.0_re_p
+      dt = -1.0
       call nextarg (string,exist)
       if (exist)  read (string,*,err=40,end=40)  dt
    40 continue
-      do while (dt .lt. 0.0_re_p)
+      do while (dt .lt. 0.0)
          write (iout,50)
    50    format (/,' Enter the Time Step Length in Femtoseconds',
      &              ' [1.0] :  ',$)
          read (input,60,err=70)  dt
    60    format (f20.0)
-         if (dt .le. 0.0_re_p)  dt = 1.0_re_p
+         if (dt .le. 0.0)  dt = 1.0
    70    continue
       end do
-      dt = 0.001_re_p * dt
+      dt = 0.001 * dt
 c
 c     enforce bounds on thermostat and barostat coupling times
 c
@@ -237,17 +240,17 @@ c
 c
 c     set the time between trajectory snapshot coordinate dumps
 c
-      dtdump = -1.0_re_p
+      dtdump = -1.0
       call nextarg (string,exist)
       if (exist)  read (string,*,err=80,end=80)  dtdump
    80 continue
-      do while (dtdump .lt. 0.0_re_p)
+      do while (dtdump .lt. 0.0)
          write (iout,90)
    90    format (/,' Enter Time between Dumps in Picoseconds',
      &              ' [0.1] :  ',$)
          read (input,100,err=110)  dtdump
   100    format (f20.0)
-         if (dtdump .le. 0.0_re_p)  dtdump = 0.1_re_p
+         if (dtdump .le. 0.0)  dtdump = 0.1
   110    continue
       end do
       iwrite = nint(dtdump/dt)
@@ -275,17 +278,17 @@ c
          end do
          if (mode.eq.2 .or. mode.eq.4) then
             isothermal = .true.
-            kelvin = -1.0_re_p
+            kelvin = -1.0
             call nextarg (string,exist)
             if (exist)  read (string,*,err=170,end=170)  kelvin
   170       continue
-            do while (kelvin .lt. 0.0_re_p)
+            do while (kelvin .lt. 0.0)
                write (iout,180)
   180          format (/,' Enter the Desired Temperature in Degrees',
      &                    ' K [298] :  ',$)
                read (input,190,err=200)  kelvin
   190          format (f20.0)
-               if (kelvin .le. 0.0_re_p)  kelvin = 298.0_re_p
+               if (kelvin .le. 0.0)  kelvin = 298.0
   200          continue
             end do
          end if
@@ -297,17 +300,17 @@ c
         endif
         if(mode.eq.4) then
             isobaric = .true.
-            atmsph = -1.0_re_p
+            atmsph = -1.0
             call nextarg (string,exist)
             if (exist)  read (string,*,err=210,end=210)  atmsph
   210       continue
-            do while (atmsph .lt. 0.0_re_p)
+            do while (atmsph .lt. 0.0)
                write (iout,220)
   220          format (/,' Enter the Desired Pressure in Atm',
      &                    ' [1.0] :  ',$)
                read (input,230,err=240)  atmsph
   230          format (f20.0)
-               if (atmsph .le. 0.0_re_p)  atmsph = 1.0_re_p
+               if (atmsph .le. 0.0)  atmsph = 1.0
   240          continue
             end do
          end if
@@ -334,17 +337,17 @@ c
          end do
          if (mode .eq. 2) then
             isothermal = .true.
-            kelvin = -1.0_re_p
+            kelvin = -1.0
             call nextarg (string,exist)
             if (exist)  read (string,*,err=290,end=290)  kelvin
   290       continue
-            do while (kelvin .lt. 0.0_re_p)
+            do while (kelvin .lt. 0.0)
                write (iout,300)
   300          format (/,' Enter the Desired Temperature in Degrees',
      &                    ' K [298] :  ',$)
                read (input,310,err=320)  kelvin
   310          format (f20.0)
-               if (kelvin .le. 0.0_re_p)  kelvin = 298.0_re_p
+               if (kelvin .le. 0.0)  kelvin = 298.0
   320          continue
             end do
          end if
@@ -352,15 +355,19 @@ c
 c
 c     setup dynamics
 c
+
+!$acc enter data create(epotpi_loc,eksumpi_loc,etotpi_loc,ekinpi_loc)
+!$acc&           create(eintrapi_loc,einterpi_loc)
+
       call mdinit(dt)      
       call allocpi()      
 
       do ibead = 1, nbeadsloc
         call mdinitbead(beadsloc(ibead)%ibead_glob,dt,restart) 
         call dedvcalc()
-        call initbead(0,beadsloc(ibead),.FALSE.,.FALSE.)
+        call initbead(0,beadsloc(ibead),.FALSE.,.TRUE.)
         call resize_nl_arrays_bead(0,beadsloc(ibead))           
-        call savebeadnl(0,beadsloc(ibead),.FALSE.)          
+        call savebeadnl(0,beadsloc(ibead),.TRUE.)          
       end do
 
       if(contract) then
@@ -375,7 +382,7 @@ c
         masspiston=masspiston*nbeads
         if(ranktot.eq.0) then
           vextvol = maxwell(masspiston,kelvin)
-          aextvol = 0_re_p
+          aextvol = 0
         endif
       endif      
       
@@ -453,7 +460,6 @@ c
         use timestat
         use mpi
         use baoabpi
-        use baoabpi4site
         implicit none
         integer, intent(in) :: istep
         real(r_p), intent(in) :: dt
@@ -476,7 +482,7 @@ c       GATHER polymer info at ranktot 0 (arrays are allocated inside the subrou
         !write(0,*) "ranktot",ranktot,"entering gather_polymer"
         call gather_polymer(polymer,beadsloc,.TRUE.,.TRUE.,.TRUE.)
 
-        !!!!!!!!CONTRACTIONS!!!!!!!!!!!!!!!!!!!!!!!
+        ! CONTRACTIONS
         if(contract) then
           call gather_polymer(polymer_ctr,beadsloc_ctr
      &                            ,.FALSE.,.FALSE.,.FALSE.)
@@ -488,13 +494,12 @@ c       GATHER polymer info at ranktot 0 (arrays are allocated inside the subrou
           do ibead = 1, nbeadsloc_ctr
             call pushbead(istep,beadsloc_ctr(ibead)
      &                            ,.false.,.true.)
-            call prepare_loaded_bead(istep)
+!$acc data present(epotpi_loc,eksumpi_loc,etotpi_loc,ekinpi_loc)
+!$acc&     present(eintrapi_loc,x,y,z,a)
+            call prepare_loaded_bead(istep)            
+            call compute_grad_slow()
+!$acc end data
             call resize_nl_arrays_bead(istep,beadsloc_ctr(ibead))
-            if (integrate.eq.'BAOAB4SITE') then
-              call compute_grad_slow_4site()
-            else
-              call compute_grad_slow()
-            endif
             call savebeadnl(istep,beadsloc_ctr(ibead),.true.)
             call initbead(istep,beadsloc_ctr(ibead)
      &                           ,.false.,.true.)
@@ -503,11 +508,7 @@ c       GATHER polymer info at ranktot 0 (arrays are allocated inside the subrou
      &                          ,.FALSE.,.FALSE.,.TRUE.)
           if(ranktot.eq.0) then
             call project_forces_contract(polymer,polymer_ctr) 
-            if (integrate.eq.'BAOAB4SITE') then
-              call apply_b_slow_4site(polymer,dt) 
-            else
-              call apply_b_slow(polymer,dt) 
-            endif
+            call apply_b_slow(polymer,dt) 
           endif
 
           call deallocate_polymer(polymer_ctr)
@@ -515,13 +516,8 @@ c       GATHER polymer info at ranktot 0 (arrays are allocated inside the subrou
 
         !write(0,*) "ranktot",ranktot,"entering compute_observables"
 c       gather and compute OBSERVABLES
-        if (integrate.eq.'BAOAB4SITE') then
-          call compute_observables_pi_4site(polymer%pos
+        call compute_observables_pi(polymer%pos
      &                    ,polymer%vel,polymer%forces,istep,dt)
-        else
-          call compute_observables_pi(polymer%pos
-     &                    ,polymer%vel,polymer%forces,istep,dt)
-        endif
         if(allocated(polymer%forces)) deallocate(polymer%forces)   
         if(allocated(polymer%forces_slow))
      &      deallocate(polymer%forces_slow)       
@@ -535,11 +531,7 @@ c       aggregate statistical AVERAGES and PRINT system info
         
 c        PROPAGATE AOA
         !write(0,*) "ranktot",ranktot,"entering aoapi"
-        if (integrate.eq.'BAOAB4SITE') then
-          call apply_aoa_pi4site(istep,dt,polymer%pos,polymer%vel)
-        else
-          call apply_aoa_pi(istep,dt,polymer%pos,polymer%vel)
-        end if
+        call apply_aoa_pi(istep,dt,polymer%pos,polymer%vel)
         time1 = mpi_wtime()
         timeaoa=time1-time0
 
@@ -551,58 +543,74 @@ c       BROADCAST polymer info from ranktot 0 to everyone else
         
         time0=mpi_wtime()
         time_com=time_com+time0-time1
+        
 
         !write(0,*) "ranktot",ranktot,"entering baoabpi2"
         do ibead = 1, nbeadsloc
+          write(0,*) "start of bead",ibead
           time00=mpi_wtime()
           ! LOAD current bead
-          call pushbead(istep,beadsloc(ibead),skip_parameters_copy,.true.)
+          call pushbead(istep,beadsloc(ibead)
+     &          ,skip_parameters_copy,.true.)
           time01=mpi_wtime()
           timepush=timepush+time01-time00
 
+          
+          write(0,*) "before prepare"
+!$acc data present(epotpi_loc,eksumpi_loc,etotpi_loc,ekinpi_loc)
+!$acc&     present(eintrapi_loc,x,y,z,v,a)
           ! REASSIGN all positions in the loaded bead
           ! and reconstruction of neighborlist
           call prepare_loaded_bead(istep)
-          call resize_nl_arrays_bead(istep,beadsloc(ibead))          
+                 
 
           ! APPLY B (compute gradient)
+          write(0,*) "before apply_b_pi"
           time00=mpi_wtime()
-          if (integrate.eq.'BAOAB4SITE') then
-            call apply_b_pi4site(istep,dt)
-          else
-            call apply_b_pi(istep,dt)
-          end if
+          call apply_b_pi(istep,dt)
           time01=mpi_wtime()
           timebaoab2=timebaoab2+time01-time00
           time00=mpi_wtime()
 
+          write(0,*) "before kinetic"
           ! COMPUTE kinetic energy of loaded bead
           call kinetic (eksumpi_loc,ekinpi_loc,temppi)
           etotpi_loc = eksumpi_loc + epotpi_loc
-
-          ! SAVE bead trajectory
-          call mdsavebeads (istep,dt)
-
           ! COMPUTE VIRIAL dE/dV
+
           !write(0,*) "ranktot",ranktot,"entering dedvcalc"
+          write(0,*) "before dedvcalc"
           call dedvcalc()
           time01=mpi_wtime()
-          timededvcalc=timededvcalc+time01-time00
-          
+          timededvcalc=timededvcalc+time01-time00  
+
+          write(0,*) "before mdsavebeads"
+          ! SAVE bead trajectory
+          call mdsavebeads (istep,dt)    
+
+!$acc end data              
                    
+          write(0,*) "before resize_nl_arrays_bead"
           time00=mpi_wtime()
+          call resize_nl_arrays_bead(istep,beadsloc(ibead))   
           ! STORE new neighborlist if necessary
           !write(0,*) "ranktot",ranktot,"entering savebeadnl" 
+          write(0,*) "before savebeadnl"
           if(.not.skip_parameters_copy) then
-            call savebeadnl(istep,beadsloc(ibead))
+            call savebeadnl(istep,beadsloc(ibead),.TRUE.)
           endif
 
+          write(0,*) "before initbead"
           ! SAVE current bead
-          call initbead(istep,beadsloc(ibead),skip_parameters_copy,.TRUE.)
+          call initbead(istep,beadsloc(ibead)
+     &          ,skip_parameters_copy,.TRUE.)
           time01=mpi_wtime()
           timeinit=timeinit+time01-time00
 
+          write(0,*) "end of bead",ibead
+
         end do
+
 
         call deallocate_polymer(polymer)
 
@@ -619,10 +627,14 @@ c            write(*,*) 'Time dedv ', timededvcalc
 c            write(*,*) 'Time aoa ', timeaoa
 c      endif
 
+
+
       end subroutine
 
       subroutine initialize_pimd_contractions()
-        use atoms
+        use atomsMirror
+        use atmtyp
+        use usage
         use bath
         use beads
         use bound
@@ -693,11 +705,13 @@ c      endif
         do k=1,nbeadsloc_ctr
           call resize_nl_arrays_bead(0,beadsloc_ctr(k))   
           call pushbead(0,beadsloc_ctr(k),.FALSE.,.FALSE.)
+!$acc data  present(x,y,z,xold,yold,zold,v,a,mass,glob,use)
           call ddpme3d
           call reinitnl(0)
           call reassignpme(.FALSE.)
           call mechanicstep(0)
           call nblist(0)
+!$acc end data
           call initbead(0,beadsloc_ctr(k),.FALSE.,.FALSE.)
           call resize_nl_arrays_bead(0,beadsloc_ctr(k))   
           call savebeadnl(0,beadsloc_ctr(k),.FALSE.)

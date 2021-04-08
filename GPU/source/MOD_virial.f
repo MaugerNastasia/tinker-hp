@@ -25,6 +25,7 @@ c
       real(r_p) virsave(3,3)
       real(r_p) g_svxx,g_svxy,g_svxz,g_svyy,g_svyz,g_svzz
       real(r_p) viramdD(3,3)
+      real(r_p) dedv
 
       logical :: use_virial=.false.
       logical :: virnum=.false.

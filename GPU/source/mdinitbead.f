@@ -51,8 +51,7 @@ c
       real(r_p) :: maxwell,speed
       real(r_p) :: hmax,hmass
       real(r_p) :: sum,dmass
-      real(r_p) :: normal
-      real(r_p) :: vec(3)
+      real(t_p) :: vec(3)
       real(r_p), allocatable :: speedvec(:)
       logical exist,heavy
       character*7 ext

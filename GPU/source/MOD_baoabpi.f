@@ -20,62 +20,23 @@ c     and solvent-solute splitting B. Leimkuhler and C. Matthews,
 c     Proceedings of the Royal Society A, 472: 20160138, 2016
 c
 c
-
-      module baoabpi
+#include "tinker_precision.h"
+      module baoabpi        
       implicit none
+
+      real(r_p),allocatable, private, save::derivs(:,:)
 
       contains
 
-c       subroutine baoabpi1 (istep,dt)
-c       use atmtyp
-c       use atoms
-c       use bath
-c       use cutoff
-c       use domdec
-c       use energi
-c       use freeze
-c       use langevin
-c       use mdstuf
-c       use moldyn
-c       use timestat
-c       use units
-c       use usage
-c       use mpi
-c       implicit none
-c       integer, intent(in) :: istep
-c       real*8, intent(in) :: dt
-c       integer i,j,iglob,ibead
-c       real*8 dt_x,factor
-c       real*8 etot,eksum,epot
-c       real*8 temp,pres
-c       real*8 part1,part2
-c       real*8 a1,a2,normal
-c       real*8 ekin(3,3)
-c       real*8 stress(3,3)
-c       real*8 time0,time1
-c c
-c c
-c c     find quarter step velocities via BAOAB recursion
-c c
-c       do i = 1, nloc
-c          iglob = glob(i)
-c          if (use(iglob)) then
-c             do j = 1, 3
-c                v(j,iglob) = v(j,iglob) + 0.5*dt*a(j,iglob)
-c             end do
-c          end if
-c       end do
-
-c       end subroutine baoabpi1
-
       subroutine apply_b_pi (istep,dt)
       use atmtyp
-      use atoms
+      use atomsMirror
       use bath
       use beads
       use cutoff
       use domdec
-      use energi
+      use deriv  ,only: info_forces,prtEForces,cDef
+      use energi ,only: info_energy
       use freeze
       use langevin
       use mdstuf
@@ -84,49 +45,79 @@ c       end subroutine baoabpi1
       use units
       use usage
       use mpi
+      use utils  ,only:set_to_zero1m
+      use utilgpu,only:prmem_requestm,rec_queue
+      use sizes
       implicit none
       integer, intent(in) :: istep
-      real*8, intent(in) :: dt
+      real(r_p), intent(in) :: dt
       integer i,j,iglob,ibead,ierr
-      real*8 dt_x,factor
-      real*8 pres
-      real*8 part1,part2
-      real*8 stress(3,3)
-      real*8 time0,time1
-      real*8, allocatable :: derivs(:,:)
+      real(r_p) dt_x,factor
+      real(r_p) pres
+      real(r_p) part1,part2
+      real(r_p) stress(3,3)
+      real(r_p) time0,time1
+      
+!$acc data present(epotpi_loc,eintrapi_loc)
+!$acc&     present(x,y,z,xold,yold,zold,v,a,mass,glob,use)
 
-      allocate (derivs(3,nbloc))
-      derivs = 0d0
+!$acc update host(x,y,z)
+      write(0,*) "nbloc=",nbloc
+      write(0,*) x(1),y(1),z(1)
+      write(0,*) x(n),y(n),z(n)
+ 
+      write(0,*) "prmem_requestm"
+      call prmem_requestm(derivs,3,nbloc,async=.true.)
+      write(0,*) "set_to_zero1m"
+      call set_to_zero1m(derivs,3*nbloc,rec_queue)
+!$acc wait
 c
 c     get the potential energy and atomic forces
 c
-      call gradient (epotpi_loc,derivs)
+      if(contract) then
+        call gradfast(eintrapi_loc,derivs)
+        call commforcesrespa(derivs,.true.)
+      else
+        write(0,*) "gradient"
+        call gradient (epotpi_loc,derivs)     
+        write(0,*) "commforces"
+        call commforces(derivs) 
+      endif
 c
 c     MPI : get total energy (and allreduce the virial)
 c
+      write(0,*) "reduceen"
       call reduceen(epotpi_loc)
-      call MPI_BCAST(epotpi_loc,1,MPI_REAL8,0,COMM_TINKER,ierr)
-c
-c     communicate forces
-c
-      call commforces(derivs)
+      write(0,*) "MPI_BCAST"
+!$acc host_data use_device(epotpi_loc)
+!$acc wait
+      call MPI_BCAST(epotpi_loc,1,MPI_RPREC,0,COMM_TINKER,ierr)
+!$acc end host_data
+
 c
 c     use Newton's second law to get the next accelerations;
 c     find the full-step velocities using the BAOAB recursion
 c
 c      write(*,*) 'x 1 = ',x(1),y(1),v(1,1),a(1,1)
+
+      write(0,*) "update vel"
+!$acc parallel loop collapse(2) present(derivs) async
       do i = 1, nloc
-         iglob = glob(i)
-         if (use(iglob)) then
-            do j = 1, 3
+        do j = 1, 3
+          iglob = glob(i)
+          if (use(iglob)) then            
                a(j,iglob) = -convert * derivs(j,i)/mass(iglob)
                v(j,iglob) = v(j,iglob) + dt*a(j,iglob)
                !v(j,iglob) = v(j,iglob) + 0.5*dt*a(j,iglob)
-            end do
-         end if
-      end do
+          end if
+        enddo
+      enddo
+!$acc wait
 
-      deallocate(derivs)
+      write(0,*) "end apply_b"
+
+!$acc end data
+
 
       end subroutine apply_b_pi
 
@@ -158,34 +149,17 @@ c
       use inform
       use molcul
       implicit none
-      real*8, intent(in) :: dt
+      real(r_p), intent(in) :: dt
       integer, intent(in) :: istep
-      real*8, intent(inout),allocatable::pos_full(:,:,:),vel_full(:,:,:)
+      real(8),intent(inout),allocatable::pos_full(:,:,:),vel_full(:,:,:)
       ! pos_full, vel_full must be filled only for ranktot 0
       integer i,j,k,iproc, ibead,l
       integer :: modstep
-      real*8 :: eigx0,eigv0
-      real*8 :: dt2, a1,a2, sqrtmass
-      real*8 :: mpitime1, mpitime2
-      real*8 :: time_tot, time_com
+      real(r_p) :: dt2, a1,a2, sqrtmass
 
-      dt2=0.5*dt
+      dt2=0.5_re_p*dt
 
       if(isobaric) extvolold = extvol
-
-      !time_tot=0d0
-      !time_com=0d0
-      !mpitime1=mpi_wtime()
-
-      ! gather beads info at ranktot 0
-      !call gather_polymer(pos_full,vel_full,forces_full)
-
-      !call compute_observables_pi(pos_full,vel_full,forces_full,istep)
-
-      !if(ranktot.eq.0) call mdstatpi(istep,dt)
-      
-      !mpitime2=mpi_wtime()
-      !time_com=mpitime2-mpitime1
 
 c     propagate AOA
       if(ranktot .eq. 0) then
@@ -198,7 +172,7 @@ c       transform to normal modes
 
        if(isobaric) then
 c         propagate volume velocity from previous step
-          aextvol = 3.d0*nbeads*convert*(
+          aextvol = 3.0_re_p*nbeads*convert*(
      &        extvol*(presvir-atmsph)/prescon 
      &        +gasconst*kelvin 
      &      )/masspiston
@@ -236,35 +210,22 @@ c         transform back to coordinates
         ENDDO ; ENDDO 
       endif
 
-      !mpitime1=mpi_wtime()
-      !time_tot=mpitime1-mpitime2
-
-      !call broadcast_polymer(pos_full,vel_full)
-      !if(ranktot.eq.0) deallocate(pos_full,vel_full,forces_full)
 
       if(isobaric) call rescale_box_pi(istep)     
      
-      
-      !mpitime2=mpi_wtime()
-      !time_com=time_com+mpitime2-mpitime1
-
-c      if (ranktot.eq.0) then
-c            write(*,*) 'Time spent in com', time_com
-c            write(*,*) 'Time spent in propagation', time_tot
-c      endif
       end subroutine apply_aoa_pi
 
 
-       subroutine apply_a_pi(eigpos,eigvel,tau)
+      subroutine apply_a_pi(eigpos,eigvel,tau)
       use atoms
       use units
       use beads
       use bath
       implicit none
-      real*8, intent(inout), allocatable :: eigpos(:,:,:),eigvel(:,:,:)
-      real*8, intent(in) :: tau
-      real*8 :: eigx0,eigv0
-      real*8 :: acentroid,scale
+      real(8), intent(inout), allocatable :: eigpos(:,:,:),eigvel(:,:,:)
+      real(r_p), intent(in) :: tau
+      real(8) :: eigx0,eigv0
+      real(r_p) :: acentroid,scale
       integer :: i,j,k
 
         if(isobaric) then
@@ -306,11 +267,11 @@ c         propagate springs (half step)
         use beads
         use bath
         use langevin
+        use random_mod
         implicit none
-        real*8, intent(inout),allocatable :: eigpos(:,:,:),eigvel(:,:,:)
-        real*8, intent(in) :: tau
-        real*8 :: acentroid,a1p,a2p,gammak,a1,a2
-        real*8 :: normal
+        real(8),intent(inout),allocatable :: eigpos(:,:,:),eigvel(:,:,:)
+        real(r_p), intent(in) :: tau
+        real(r_p) :: acentroid,a1p,a2p,gammak,a1,a2
         integer :: i,j,k
 
 c         propagate langevin (full step, TRPMD)
@@ -351,20 +312,16 @@ c         langevin piston (full step)
       use units
       use usage
       use mpi
-      use util4site
+      use utils  ,only:set_to_zero1m
+      use utilgpu,only:prmem_requestm,rec_queue
       implicit none
       integer i,j,iglob,ibead,ierr
       integer iloc,iloc1,iloc2,iloc3,ilocrec1,ilocrec2,ilocrec3
-      real*8 dt_x,factor
-      real*8 pres
-      real*8 part1,part2
-      real*8 stress(3,3)
-      real*8 time0,time1
-      real*8, allocatable :: derivs(:,:)
 
-      allocate(derivs(3,nbloc))
-      derivs=0d0
-      
+!$acc data present(einterpi_loc)
+!$acc&     present(x,y,z,a,mass,glob,use)
+      call prmem_requestm(derivs,3,nbloc,async=.true.)
+      call set_to_zero1m(derivs,3*nbloc,rec_queue)
       
       call gradslow(einterpi_loc,derivs)      
       call reduceen(einterpi_loc)
@@ -373,20 +330,17 @@ c         langevin piston (full step)
       call commforcesrespa(derivs,.false.)
       !write(0,*) einterpi_loc
 
-c     use Newton's second law to get the next accelerations;
-c     find the full-step velocities using the BAOAB recursion
-c
-c      write(*,*) 'x 1 = ',x(1),y(1),v(1,1),a(1,1)
+!$acc parallel loop collapse(2) present(derivs) async
       do i = 1, nloc
-        iglob = glob(i)
-        if (use(iglob)) then
         do j = 1, 3
-            a(j,iglob) = -convert * derivs(j,i)/mass(iglob)
-c               v(j,iglob) = v(j,iglob) + dt*a(j,iglob)
-c               v(j,iglob) = v(j,iglob) + 0.5*dt*a(j,iglob)
-          end do
-        end if
+          iglob = glob(i)
+          if (use(iglob)) then       
+            a(j,iglob) = -convert * derivs(j,i)/mass(iglob)   
+          end if
+        end do
       end do
+!$acc wait
+!$acc end data
       deallocate(derivs)
       
       end subroutine compute_grad_slow
@@ -411,23 +365,15 @@ c               v(j,iglob) = v(j,iglob) + 0.5*dt*a(j,iglob)
       use units
       use usage
       use mpi
-      use util4site
       implicit none
       type(POLYMER_COMM_TYPE) :: polymer,polymer_ctr
-      real*8, intent(in) :: dt
+      real(r_p), intent(in) :: dt
       integer i,j,k,iglob,ibead,ierr
-      integer iloc,iloc1,iloc2,iloc3,ilocrec1,ilocrec2,ilocrec3
-      real*8 dt_x,factor
-      real*8 pres
-      real*8 part1,part2
-      real*8 time0,time1
 
-      if(ranktot.eq.0) then
-        DO i=1,n;  DO j=1,3
-          polymer%vel(j,i,:)=polymer%vel(j,i,:)+dt*convert
+      DO i=1,n;  DO j=1,3
+        polymer%vel(j,i,:)=polymer%vel(j,i,:)+ dt*convert
      &                            *polymer%forces_slow(j,i,:)/mass(i)
-          enddo;enddo
-      endif
+      enddo;enddo
 
       end subroutine apply_b_slow
 

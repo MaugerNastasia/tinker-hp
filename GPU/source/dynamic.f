@@ -52,7 +52,7 @@ c
       integer i,istep,nstep,ierr
       integer mode,next
       real(r_p) dt,dtdump
-      real(8) time0,time1,timestep
+      real(8) time0,time1
       logical exist,query
       character*20 keyword
       character*240 record

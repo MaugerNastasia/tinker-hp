@@ -3,15 +3,15 @@ TODO LIST FOR PIMD IMPLEMENTATION
 1) BASIC IMPLEMENTATION
 
 X redefine COMM_TINKER (like COMM_BEAD in CPU implementation)
-- rename new modules to MOD_*.f
-- port baoabpi to GPU 
-    - derivs only on GPU (check when it is created on GPU -> mdinit)
-    - check where are the energies (transfer to pi variables)
+X rename new modules to MOD_*.f
+X port baoabpi to GPU 
+    X derivs only on GPU (check when it is created on GPU -> mdinit)
+    X check where are the energies (transfer to pi variables)
     - barostat ?
-- check if mdstatpi has access to everything on CPU
+X check if mdstatpi has access to everything on CPU
 X prtdynbeads / mdsavebeads (very few modifications needed)
-- makefile & dependencies
-- use atomsMirror ??? (reCast_position in integrator)
+X makefile & dependencies
+X use atomsMirror ??? (reCast_position in integrator)
 - C_init_env => nproc/nproctot ?
 
 2) OPTIMIZATION

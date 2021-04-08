@@ -24,7 +24,9 @@ MOD_ascii.o \
 MOD_atmlst.o \
 MOD_atoms.o \
 MOD_atmtyp.o \
+MOD_baoabpi.o \
 MOD_bath.o \
+MOD_beads.o \
 MOD_bitor.o \
 MOD_bndpot.o \
 MOD_bond.o \
@@ -112,6 +114,7 @@ MOD_resdue.o \
 MOD_ring.o \
 MOD_scales.o \
 MOD_shunt.o \
+MOD_stat.o \
 MOD_strbnd.o \
 MOD_strtor.o \
 MOD_subAtoms.o \
@@ -318,9 +321,12 @@ lbfgs.o \
 linalg.o \
 maxwell.o \
 mdinit.o \
+mdinitbead.o \
 mdrest.o \
 mdsave.o \
+mdsavebeads.o \
 mdstat.o \
+mdstatpi.o \
 mechanic.o \
 mpistuff.o \
 molecule.o \
@@ -351,6 +357,7 @@ promoamd.o \
 promosmd.o \
 prmkey.o \
 prtdyn.o \
+prtdynbeads.o \
 prtxyz.o \
 readdyn.o \
 readprm.o \

@@ -620,7 +620,7 @@ c
       use iounit
       use titles
       use random_mod
-      use units
+      use units, only: gasconst, prescon
       use domdec
       implicit none
       integer i,j,k,ibar

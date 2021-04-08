@@ -16,6 +16,7 @@ c     also checks for user requested termination of a simulation while
 c     using path pimd
 c
 c
+#include "tinker_precision.h"
       subroutine mdsavebeads (istep,dt)
       use atmtyp
       use atomsMirror
@@ -36,6 +37,7 @@ c
       use titles
       use units
       use mpi
+      use dcdmod
       implicit none
       integer, intent(in) :: istep
       real(r_p), intent(in) :: dt

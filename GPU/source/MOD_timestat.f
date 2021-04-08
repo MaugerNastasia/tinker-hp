@@ -102,6 +102,7 @@ c     tinkertime     logical flag to enable timers verbosity
         real*8 timereal,timerec,timerecreccomm
         real*8 timerealdip,timerecdip,timepolarsolve
         real*8 timegrid1,timeffts,timescalar,timegrid2
+        real*8 timestep
 
         ! Timer names
         character(name_len),protected :: timer_name(max_timer_count)

@@ -190,8 +190,6 @@ c
       implicit none
       integer ierr,iproc
 c
-      allocate (bead_rank(nproctot))
-c
 c     if nbeads > 1, nproc is defined earlier (in pimd.f)
 c     else, we specify that we use standard parallelization (nproc=nproctot)
 c
@@ -213,7 +211,6 @@ c
 
       call initDevice
 
-      deallocate (bead_rank)
       end
 c
 c     Initialize GPU
