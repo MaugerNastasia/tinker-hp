@@ -218,7 +218,7 @@ c
         write(*,*) compteur
         if(compteur .ge. skipseg) then
         call adaptation_gamma_adqtb(istep,dt)
-        call adHnoise(dt)
+c        call adHnoise(dt)
         endif
       endif
       if ((mod(istep,nseg).eq.0)) call convolseg
