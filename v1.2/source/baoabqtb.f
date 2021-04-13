@@ -207,7 +207,7 @@ c     compute statistics and save trajectory for this step
 c
       call mdstat (istep,dt,etot,epot,eksum,temp,pres)
       call mdsave (istep,dt,epot)
-      call mdrest (istep)
+c      call mdrest (istep)
 
 
       if ((mod(istep,nseg).eq.0).and.adaptive) then
