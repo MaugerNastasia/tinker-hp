@@ -241,7 +241,7 @@ FFLAGS2      = $(FFLAGS)
 LIBS         = libtinker.a
 depend_targets :=
 
-LDLIBS       = -lm -L$(LIB_MKL) -L$(LIB_FFTDECOMP) -L$(LIB_CPP)
+LDLIBS       = -lm -L$(LIB_MKL) -L$(LIB_FFTDECOMP) -rpath $(LIB_CPP)
 #CULIBS       = -Mcudalib=cufft,cublas,curand -lcuda -lcudafor -lcudafor2 -lcudafor91 -lcusparse -lcudaforwrapblas -lcudadevice
 CULIBS       = -Mcudalib=curand,cufft,cublas -Mcuda=$(acc_cc_flag__) -lcusolver
 

@@ -47,7 +47,7 @@ tinkerdir=$(dirname `dirname $0`)
 # Carefully Add 'var=value' in common_config to customize your build
 # Make sure those params do not conflict with 'common_config_[dm]'
 c_c=60,70
-cuda_ver=10.1
+cuda_ver=11.0
 build_plumed=0
 
 common_config="compute_capability=$c_c cuda_version=$cuda_ver PLUMED_SUPPORT=$build_plumed"
