@@ -22,3 +22,19 @@ X use atomsMirror ??? (reCast_position in integrator)
 3) MORE FEATURES
 
 - implement IR SPECTRA (need some QTB routines => port QTB ?)
+
+4) MODULARIZATION
+
+- at the most basic level, separate the variables linked to the potential in 3 categories:
+    - global parameters that never change
+    - parameters that change and are recomputed at each step
+    - parameters that change and must be stored for the next step
+
+- implement objects/structs that encapsulate the parameters by functionality
+    - an object for mpoles, neigh, ...
+    - a big object that includes x,y,z,vel,a and all the potential parameters ?
+        -> like the bead for PIMD
+
+- routines should take arguments that they modify instead of global variables
+    => copies not necessary anymore in PIMD (we just pass the bead object)
+    - is it still possible to optimize the GPU implementation ?

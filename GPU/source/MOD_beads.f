@@ -173,8 +173,7 @@ c
         integer :: nloc,nbloc,nlocrec
         integer :: nblocrec,nlocnl
         integer :: nblocrecdir
-        integer, allocatable :: glob(:),loc(:),repart(:)
-        integer, allocatable :: ineignl(:) !,locnl(:)
+        integer, allocatable :: glob(:),loc(:),repart(:)        
         integer, allocatable :: repartrec(:), domlen(:)
         integer, allocatable :: domlenrec(:),domlenpole(:)
         integer, allocatable :: domlenpolerec(:),globrec(:)
@@ -187,6 +186,9 @@ c
         integer, allocatable :: bufbeg1(:),bufbeg2(:)
         integer :: nmoleloc
         integer, allocatable :: molculeglob(:)
+
+        !NBLIST
+        integer, allocatable :: ineignl(:)
 
         !
         !     BOND-STRETCHING
@@ -260,14 +262,22 @@ c
         integer, allocatable :: chgrecglob(:)
         integer, allocatable ::chgglob(:)
         integer, allocatable :: chgglobnl(:)
-        integer, allocatable :: nelst(:),elst(:,:)
+        integer, allocatable :: nelst(:),elst(:,:),shortelst(:,:)
+        integer, allocatable :: nelstc(:),nshortelst(:),nshortelstc(:)
+        integer, allocatable :: eblst(:),ieblst(:)
+        integer, allocatable :: shorteblst(:),ishorteblst(:)
+        integer,allocatable :: celle_key(:),celle_glob(:)
+     &              ,celle_pole(:),celle_loc(:),celle_ploc(:)
+     &              ,celle_plocnl(:)
+        integer,allocatable :: celle_chg(:)
+        real(t_p),allocatable:: celle_x(:),celle_y(:),celle_z(:)
         !
         !     MULTIPOLE
         !
         integer :: npolerecloc,npoleloc,npolebloc, npolelocnl
         integer, allocatable :: polerecglob(:)
         integer, allocatable :: poleglob(:)
-        integer, allocatable :: poleloc(:)
+        integer, allocatable :: poleloc(:),polelocnl(:)
         integer, allocatable :: poleglobnl(:)
         !
         !      POLARIZATION
@@ -278,10 +288,17 @@ c
         !
         !     VDW
         !
-        integer :: nvdwbloc,nvdwlocnl
+        integer :: nvdwloc,nvdwbloc,nvdwlocnl,nvdwlocnlb,nvdwlocnlb_pair
+        integer :: nvdwblocloop
+        integer :: nvdwlocnlb2_pair,nshortvdwlocnlb2_pair
         integer, allocatable :: vdwglob(:)
         integer, allocatable :: vdwglobnl(:)
         integer, allocatable :: nvlst(:),vlst(:,:)
+        integer, allocatable :: nshortvlst(:),shortvlst(:,:)
+        integer, allocatable :: vblst(:),ivblst(:)
+        integer, allocatable :: shortvblst(:),ishortvblst(:)
+        integer,allocatable :: cellv_key(:),cellv_glob(:)
+     &                        ,cellv_loc(:),cellv_jvdw(:)
         !
         !     STAT
         !
@@ -483,8 +500,10 @@ c
       allocate(bead%bufbeg1(nproc))
       allocate(bead%bufbeg2(nproc))
       allocate(bead%molculeglob(nmol))
-      allocate(bead%ineignl(n))
-      !allocate(bead%locnl(n))      
+
+      if(allocated(ineignl)) 
+     &   allocate(bead%ineignl(n))
+         
 
 
       if (use_vdw) then
@@ -562,7 +581,10 @@ c
         allocate(bead%poleglob(n))
         allocate(bead%poleloc(n))
         allocate(bead%poleglobnl(n))
+        allocate(bead%polelocnl(n))
       end if
+
+      
 
 
       end subroutine
@@ -625,15 +647,55 @@ c
         if (allocated(bead%polerecglob)) deallocate(bead%polerecglob)
         if (allocated(bead%poleglob)) deallocate(bead%poleglob)
         if (allocated(bead%poleloc)) deallocate(bead%poleloc)
+        if (allocated(bead%polelocnl)) deallocate(bead%polelocnl)
         if (allocated(bead%poleglobnl)) deallocate(bead%poleglobnl)
+
+        if (allocated(bead%nvlst)) deallocate(bead%nvlst)
+        if (allocated(bead%vlst)) deallocate(bead%vlst)
+        if (allocated(bead%nelst)) deallocate(bead%nelst)
+        if (allocated(bead%elst)) deallocate(bead%elst)
+
+        if (allocated(bead%nelstc)) deallocate(bead%nelstc)
+        if (allocated(bead%shortelst)) deallocate(bead%shortelst)
+        if (allocated(bead%nshortelst)) deallocate(bead%nshortelst)
+        if (allocated(bead%shortelst)) deallocate(bead%shortelst)
+        if (allocated(bead%nshortelstc)) deallocate(bead%nshortelstc)
+
+        if (allocated(bead%eblst)) deallocate(bead%eblst)
+        if (allocated(bead%ieblst)) deallocate(bead%ieblst)
+        if (allocated(bead%shorteblst)) deallocate(bead%shorteblst)
+        if (allocated(bead%ishorteblst)) deallocate(bead%ishorteblst)
+
+        if (allocated(bead%celle_key)) deallocate(bead%celle_key)
+        if (allocated(bead%celle_glob)) deallocate(bead%celle_glob)
+        if (allocated(bead%celle_pole)) deallocate(bead%celle_pole)
+        if (allocated(bead%celle_loc)) deallocate(bead%celle_loc)
+        if (allocated(bead%celle_ploc)) deallocate(bead%celle_ploc)
+        if (allocated(bead%celle_plocnl)) deallocate(bead%celle_plocnl)
+        if (allocated(bead%celle_chg)) deallocate(bead%celle_chg)
+        if (allocated(bead%celle_x)) deallocate(bead%celle_x)
+        if (allocated(bead%celle_y)) deallocate(bead%celle_y)
+        if (allocated(bead%celle_z)) deallocate(bead%celle_z)
+
+        if (allocated(bead%nshortvlst)) deallocate(bead%nshortvlst)
+        if (allocated(bead%shortvlst)) deallocate(bead%shortvlst)
+        if (allocated(bead%vblst)) deallocate(bead%vblst)
+        if (allocated(bead%ivblst)) deallocate(bead%ivblst)
+        if (allocated(bead%shortvblst)) deallocate(bead%shortvblst)
+        if (allocated(bead%ishortvblst)) deallocate(bead%ishortvblst)
+        if (allocated(bead%cellv_key)) deallocate(bead%cellv_key)
+        if (allocated(bead%cellv_glob)) deallocate(bead%cellv_glob)
+        if (allocated(bead%cellv_loc)) deallocate(bead%cellv_loc)
+        if (allocated(bead%cellv_jvdw)) deallocate(bead%cellv_jvdw)
+
 
       end subroutine deallocate_bead
       
 
-      subroutine initbead(istep,bead,skip_parameters,updateGPU)
+      subroutine initbead(istep,bead,skip_parameters)
       use angang
       use angle
-      use atoms
+      use atomsMirror
       use atmlst
       use atmtyp
       use bond
@@ -664,15 +726,14 @@ c
       implicit none
       integer, intent(in) :: istep
       type(BEAD_TYPE), intent(inout) :: bead 
-      logical,intent(in) :: skip_parameters,updateGPU
+      logical,intent(in) :: skip_parameters
       integer ibead,i,modnl
 
+!$acc wait
 c
 c     positions, speed, mass
 c
-      if(updateGPU) then
 !$acc update host(x(:),y(:),z(:),v(:,:),a(:,:))
-      endif
 
       bead%x = x
       bead%y = y
@@ -680,17 +741,15 @@ c
       bead%v = v
       bead%a = a
 
-!$acc update host(eksumpi_loc,ekinpi_loc) async
+!$acc update host(eksumpi_loc,ekinpi_loc)
       if(contract) then
-!$acc update host(eintrapi_loc,einterpi_loc) async
-!$acc wait
+!$acc update host(eintrapi_loc,einterpi_loc)
         bead%eintra=eintrapi_loc
         bead%einter=einterpi_loc
         bead%epot=eintrapi_loc+einterpi_loc
         bead%etot=eintrapi_loc+einterpi_loc+eksumpi_loc
       else
-!$acc update host(epotpi_loc) async
-!$acc wait
+!$acc update host(epotpi_loc)
         bead%epot=epotpi_loc
         bead%etot=epotpi_loc+eksumpi_loc
       endif
@@ -699,9 +758,7 @@ c
       bead%ekin=ekinpi_loc
       bead%dedv = dedv
 
-      if(updateGPU) then
 !$acc update host(glob(:))
-      endif
       bead%nloc = nloc
       bead%glob = glob
 c
@@ -734,7 +791,6 @@ c
       bead%nlocnl = nlocnl
       bead%nblocrecdir = nblocrecdir
 
-      if(updateGPU) then
 !$acc update host(loc(:),ineignl(:)) async
 !$acc update host(repart(:),repartrec(:)) async
 !$acc update host(domlenrec(:),domlenpole(:),domlenpolerec(:)) async
@@ -743,7 +799,6 @@ c
 !$acc update host(buflen2(:),buf1(:),buf2(:)) async
 !$acc update host(bufbeg1(:),bufbeg2(:)) async
 !$acc wait
-      endif
       bead%loc = loc
       bead%ineignl = ineignl
       !bead%locnl = locnl
@@ -771,9 +826,7 @@ c
 c     VDW 
 c
       if (use_vdw) then
-        if(updateGPU) then
-!$acc update host(nvdwbloc,nvdwlocnl,vdwglob(:),vdwglobnl(:))
-        endif
+!$acc update host(vdwglob(:),vdwglobnl(:))
         bead%nvdwbloc = nvdwbloc
         bead%vdwglob = vdwglob
         bead%vdwglobnl = vdwglobnl
@@ -783,9 +836,7 @@ c
 c     BONDS
 c
       if (use_bond) then
-        if(updateGPU) then
-!$acc update host(nbondloc,bndglob(:))
-        endif
+!$acc update host(bndglob(:))
         bead%bndglob = bndglob
         bead%nbondloc = nbondloc
       end if
@@ -793,9 +844,7 @@ c
 c     STRETCH-BEND
 c
       if (use_strbnd) then
-        if(updateGPU) then
-!$acc update host(nstrbndloc,strbndglob(:))
-        endif
+!$acc update host(strbndglob(:))
         bead%strbndglob = strbndglob
         bead%nstrbndloc = nstrbndloc
       end if
@@ -803,9 +852,7 @@ c
 c     UREY-BRADLEY
 c
       if (use_urey) then
-        if(updateGPU) then
-!$acc update host(nureyloc,ureyglob(:))
-        endif
+!$acc update host(ureyglob(:))
         bead%ureyglob = ureyglob
         bead%nureyloc = nureyloc
       end if
@@ -813,9 +860,7 @@ c
 c     ANGlE-ANGLE
 c
       if (use_angang) then
-        if(updateGPU) then
-!$acc update host(nangangloc,angangglob(:))
-        endif
+!$acc update host(angangglob(:))
         bead%angangglob = angangglob
         bead%nangangloc = nangangloc
       end if
@@ -823,9 +868,7 @@ c
 c     OP-BENDING
 c
       if (use_opbend) then
-        if(updateGPU) then
-!$acc update host(nopbendloc,opbendglob(:))
-        endif
+!$acc update host(opbendglob(:))
         bead%opbendglob = opbendglob
         bead%nopbendloc = nopbendloc
       end if
@@ -833,9 +876,7 @@ c
 c     OP-DIST
 c
       if (use_opdist) then
-        if(updateGPU) then
-!$acc update host(nopdistloc,opdistglob(:))
-        endif
+!$acc update host(opdistglob(:))
         bead%opdistglob = opdistglob
         bead%nopdistloc = nopdistloc
       end if
@@ -843,9 +884,7 @@ c
 c     IMPROP
 c
       if (use_improp) then
-        if(updateGPU) then
-!$acc update host(niproploc,impropglob(:))
-        endif
+!$acc update host(impropglob(:))
         bead%impropglob = impropglob
         bead%niproploc = niproploc
       end if
@@ -853,9 +892,7 @@ c
 c     IMPTOR
 c
       if (use_imptor) then
-        if(updateGPU) then
-!$acc update host(nitorsloc,imptorglob(:))
-        endif
+!$acc update host(imptorglob(:))
         bead%imptorglob = imptorglob
         bead%nitorsloc = nitorsloc
       end if
@@ -863,9 +900,7 @@ c
 c     TORSION
 c
       if (use_tors) then
-        if(updateGPU) then
-!$acc update host(ntorsloc,torsglob(:))
-        endif
+!$acc update host(torsglob(:))
         bead%torsglob = torsglob
         bead%ntorsloc = ntorsloc
       end if
@@ -873,9 +908,7 @@ c
 c     PITORSION
 c
       if (use_pitors) then
-        if(updateGPU) then
-!$acc update host(npitorsloc,pitorsglob(:))
-        endif
+!$acc update host(pitorsglob(:))
         bead%pitorsglob = pitorsglob
         bead%npitorsloc = npitorsloc
       end if
@@ -883,9 +916,7 @@ c
 c     STRETCH-TORSION
 c
       if (use_strtor) then
-        if(updateGPU) then
-!$acc update host(nstrtorloc,strtorglob(:))
-        endif
+!$acc update host(strtorglob(:))
         bead%strtorglob = strtorglob
         bead%nstrtorloc = nstrtorloc
       end if
@@ -893,9 +924,7 @@ c
 c     TORSION-TORSION
 c
       if (use_tortor) then
-        if(updateGPU) then
-!$acc update host(ntortorloc,tortorglob(:))
-        endif
+!$acc update host(tortorglob(:))
         bead%tortorglob = tortorglob
         bead%ntortorloc = ntortorloc
       end if
@@ -903,9 +932,7 @@ c
 c     ANGLE
 c
       if (use_angle) then
-        if(updateGPU) then
-!$acc update host(nangleloc,angleglob(:))
-        endif
+!$acc update host(angleglob(:))
         bead%angleglob = angleglob
         bead%nangleloc = nangleloc
       end if
@@ -913,11 +940,7 @@ c
 c     CHARGE
 c
       if (use_charge) then
-        if(updateGPU) then
-!$acc update host(nionloc,nionlocnl,nionrecloc) async
-!$acc update host(chgrecglob(:),chgglob(:),chgglobnl(:)) async
-!$acc wait
-        endif
+!$acc update host(chgrecglob(:),chgglob(:),chgglobnl(:))
         bead%chgrecglob = chgrecglob
         bead%nionrecloc = nionrecloc
         bead%chgglob = chgglob
@@ -933,30 +956,26 @@ c
 c     MULTIPOLE
 c
       if (use_mpole) then
-        if(updateGPU) then
-!$acc update host(npoleloc,npolebloc,poleglobnl) async
-!$acc update host(npolelocnl,npolerecloc) async
 !$acc update host(polerecglob(:),poleglob(:),poleloc(:)) async
+!$acc update host(polelocnl(:)) async
 !$acc wait
-        endif
-        bead%polerecglob = polerecglob
+        bead%polerecglob(1:nlocrec) = polerecglob(:)
         bead%npolerecloc = npolerecloc
-        bead%poleglob = poleglob
+        bead%poleglob(1:nbloc) = poleglob(:)
         bead%poleloc = poleloc
         bead%npoleloc = npoleloc
         bead%npolebloc = npolebloc
-        bead%poleglobnl = poleglobnl
+        bead%poleglobnl(1:nlocnl) = poleglobnl
         bead%npolelocnl = npolelocnl
+        bead%polelocnl = polelocnl
       end if
 c
 c     POLARIZATION
 c
       if (use_polar) then
-        if(updateGPU) then
 !$acc update host(udalt(:,:,:),upalt(:,:,:)) async
 !$acc update host(uind(:,:),uinp(:,:)) async
 !$acc wait
-        endif
         bead%nualt = nualt
         bead%udalt = udalt
         bead%upalt = upalt
@@ -971,7 +990,7 @@ c
 
       end subroutine initbead
 
-      subroutine resize_nl_arrays_bead(istep,bead)
+      subroutine resize_nl_arrays_bead(bead)
       use angle
       use atoms
       use bath
@@ -987,65 +1006,362 @@ c
       use units
       use mdstuf
       implicit none
-      integer, intent(in) :: istep
       TYPE(BEAD_TYPE), intent(inout) :: bead
       integer nblocrecdirmax,modnl
-  
-      modnl = mod(istep,ineigup)
-      if (modnl.ne.0) return    
 
       !nlocnlmax = maxval(nlocnlpi)
-      if (use_vdw) then
+      if (allocated(nvlst)) then
         if (allocated(bead%nvlst)) deallocate(bead%nvlst)
-        allocate(bead%nvlst(bead%nlocnl))
+        allocate(bead%nvlst(size(nvlst)))
+      endif
+
+      if(allocated(vlst)) then
         if (allocated(bead%vlst)) deallocate(bead%vlst)
-        allocate(bead%vlst(maxvlst,bead%nlocnl))
-      end if
-      if (use_mpole.or.use_charge) then
+        allocate(bead%vlst(size(vlst,1),size(vlst,2)))
+      endif
+
+      if(allocated(nelst)) then
         if (allocated(bead%nelst)) deallocate(bead%nelst)
-        allocate(bead%nelst(bead%nlocnl))
+        allocate(bead%nelst(size(nelst)))
+      endif
+
+      if (allocated(elst)) then        
         if (allocated(bead%elst)) deallocate(bead%elst)
-        allocate(bead%elst(maxelst,bead%nlocnl))
+        allocate(bead%elst(size(elst,1),size(elst,2)))
       end if
+
+      if (allocated(nelstc)) then        
+        if (allocated(bead%nelstc)) deallocate(bead%nelstc)
+        allocate(bead%nelstc(size(nelstc)))
+      end if
+
+      if (allocated(shortelst)) then        
+        if (allocated(bead%shortelst)) deallocate(bead%shortelst)
+        allocate(bead%shortelst(size(shortelst,1),size(shortelst,2)))
+      end if
+
+      if (allocated(nshortelst)) then        
+        if (allocated(bead%nshortelst)) deallocate(bead%nshortelst)
+        allocate(bead%nshortelst(size(nshortelst)))
+      end if
+
+      if (allocated(nshortelstc)) then        
+        if (allocated(bead%nshortelstc)) deallocate(bead%nshortelstc)
+        allocate(bead%nshortelstc(size(nshortelstc)))
+      end if
+
+      if (allocated(eblst)) then        
+        if (allocated(bead%eblst)) deallocate(bead%eblst)
+        allocate(bead%eblst(size(eblst)))
+      end if
+
+       if (allocated(ieblst)) then        
+        if (allocated(bead%ieblst)) deallocate(bead%ieblst)
+        allocate(bead%ieblst(size(ieblst)))
+      end if
+
+      if (allocated(shorteblst)) then        
+        if (allocated(bead%shorteblst)) deallocate(bead%shorteblst)
+        allocate(bead%shorteblst(size(shorteblst)))
+      end if
+
+      if (allocated(ishorteblst)) then        
+        if (allocated(bead%ishorteblst)) deallocate(bead%ishorteblst)
+        allocate(bead%ishorteblst(size(ishorteblst)))
+      end if
+
+      if (allocated(nshortvlst)) then        
+        if (allocated(bead%nshortvlst)) deallocate(bead%nshortvlst)
+        allocate(bead%nshortvlst(size(nshortvlst)))
+      end if
+
+      if (allocated(shortvlst)) then        
+        if (allocated(bead%shortvlst)) deallocate(bead%shortvlst)
+        allocate(bead%shortvlst(size(shortvlst,1),size(shortvlst,2)))
+      end if
+
+      if (allocated(vblst)) then        
+        if (allocated(bead%vblst)) deallocate(bead%vblst)
+        allocate(bead%vblst(size(vblst)))
+      end if
+
+      if (allocated(ivblst)) then        
+        if (allocated(bead%ivblst)) deallocate(bead%ivblst)
+        allocate(bead%ivblst(size(ivblst)))
+      end if
+
+      if (allocated(shortvblst)) then        
+        if (allocated(bead%shortvblst)) deallocate(bead%shortvblst)
+        allocate(bead%shortvblst(size(shortvblst)))
+      end if
+
+      if (allocated(ishortvblst)) then        
+        if (allocated(bead%ishortvblst)) deallocate(bead%ishortvblst)
+        allocate(bead%ishortvblst(size(ishortvblst)))
+      end if
+
+      if(allocated(celle_glob))  then
+        if (allocated(bead%celle_glob)) deallocate(bead%celle_glob)
+        allocate(bead%celle_glob(size(celle_glob)))
+      endif
+
+      if(allocated(celle_pole))  then
+        if (allocated(bead%celle_pole)) deallocate(bead%celle_pole)
+        allocate(bead%celle_pole(size(celle_pole)))
+      endif
+
+      if(allocated(celle_plocnl))  then
+        if (allocated(bead%celle_plocnl)) deallocate(bead%celle_plocnl)
+        allocate(bead%celle_plocnl(size(celle_plocnl)))
+      endif
+
+      if(allocated(celle_key))  then
+        if (allocated(bead%celle_key)) deallocate(bead%celle_key)
+        allocate(bead%celle_key(size(celle_key)))
+      endif
+
+      if(allocated(celle_chg))  then
+        if (allocated(bead%celle_chg)) deallocate(bead%celle_chg)
+        allocate(bead%celle_chg(size(celle_chg)))
+      endif
+
+      if(allocated(celle_loc))  then
+        if (allocated(bead%celle_loc)) deallocate(bead%celle_loc)
+        allocate(bead%celle_loc(size(celle_loc)))
+      endif
+
+      if(allocated(celle_ploc))  then
+        if (allocated(bead%celle_ploc)) deallocate(bead%celle_ploc)
+        allocate(bead%celle_ploc(size(celle_ploc)))
+      endif
+
+      if(allocated(celle_x))  then
+        if (allocated(bead%celle_x)) deallocate(bead%celle_x)
+        allocate(bead%celle_x(size(celle_x)))
+      endif
+
+      if(allocated(celle_y))  then
+        if (allocated(bead%celle_y)) deallocate(bead%celle_y)
+        allocate(bead%celle_y(size(celle_y)))
+      endif
+
+      if(allocated(celle_z))  then
+        if (allocated(bead%celle_z)) deallocate(bead%celle_z)
+        allocate(bead%celle_z(size(celle_z)))
+      endif
+
+      if(allocated(cellv_key))  then
+        if (allocated(bead%cellv_key)) deallocate(bead%cellv_key)
+        allocate(bead%cellv_key(size(cellv_key)))
+      endif
+
+      if(allocated(cellv_glob))  then
+        if (allocated(bead%cellv_glob)) deallocate(bead%cellv_glob)
+        allocate(bead%cellv_glob(size(cellv_glob)))
+      endif
+
+      if(allocated(cellv_loc))  then
+        if (allocated(bead%cellv_loc)) deallocate(bead%cellv_loc)
+        allocate(bead%cellv_loc(size(cellv_loc)))
+      endif
+
+       if(allocated(cellv_jvdw))  then
+        if (allocated(bead%cellv_jvdw)) deallocate(bead%cellv_jvdw)
+        allocate(bead%cellv_jvdw(size(cellv_jvdw)))
+      endif
+
 
       end subroutine resize_nl_arrays_bead
 c
-      subroutine savebeadnl(istep,bead,updateGPU)
+      subroutine savebeadnl(istep,bead)
       use domdec
       use neigh
       use potent
       implicit none
       TYPE(BEAD_TYPE), intent(inout) :: bead
       integer, intent(in) ::  istep
-      LOGICAL, intent(in) :: updateGPU
       integer modnl
 
-      modnl = mod(istep,ineigup)
-      if (modnl.ne.0) return
 
-      if (use_vdw) then
-        if(updateGPU) then
-!$acc update host(nvlst(:),vlst(:,:))
-        endif
+      modnl = mod(istep,ineigup)
+
+      if(modnl==0) call resize_nl_arrays_bead(bead)
+c
+c      ! COPY ARRAYS THAT CHANGE EACH STEP
+c
+      if (allocated(celle_loc)) then
+!$acc update host(celle_loc)
+        bead%celle_loc = celle_loc
+      endif
+
+      if (allocated(celle_ploc)) then
+!$acc update host(celle_ploc)
+        bead%celle_ploc = celle_ploc
+      endif
+
+      if (allocated(celle_x)) then
+!$acc update host(celle_x)
+        bead%celle_x = celle_x
+      endif
+
+      if (allocated(celle_y)) then
+!$acc update host(celle_y)
+        bead%celle_y = celle_y
+      endif
+
+      if (allocated(celle_z)) then
+!$acc update host(celle_z)
+        bead%celle_z = celle_z
+      endif
+
+
+      if (modnl.ne.0) return
+c
+c      ! COPY ARRAYS THAT CHANGE ONLY WHEN WE RECOMPUTE THE NBLIST
+c
+
+      if (allocated(nvlst)) then
+!$acc update host(nvlst)
         bead%nvlst = nvlst
+      endif
+
+      if(allocated(vlst)) then
+!$acc update host(vlst)
         bead%vlst = vlst
-      end if
-      
-      if ((use_charge).or.(use_mpole)) then
-        if(updateGPU) then
-!$acc update host(nelst(:),elst(:,:))
-        endif
+      endif
+
+      if(allocated(nelst)) then
+!$acc update host(nelst)
         bead%nelst = nelst
+      endif
+
+      if (allocated(elst)) then        
+!$acc update host(elst)
         bead%elst = elst
       end if
-      return
+
+      if (allocated(nelstc)) then        
+!$acc update host(nelstc)
+        bead%nelstc = nelstc
+      end if
+
+      if (allocated(shortelst)) then        
+!$acc update host(shortelst)
+        bead%shortelst = shortelst
+      end if
+
+      if (allocated(nshortelst)) then        
+!$acc update host(nshortelst)
+        bead%nshortelst = nshortelst
+      end if
+
+      if (allocated(nshortelstc)) then        
+!$acc update host(nshortelstc)
+        bead%nshortelstc = nshortelstc
+      end if
+
+      if (allocated(eblst)) then        
+!$acc update host(eblst)
+        bead%eblst = eblst
+      end if
+
+       if (allocated(ieblst)) then        
+!$acc update host(ieblst)
+        bead%ieblst = ieblst
+      end if
+
+      if (allocated(shorteblst)) then        
+!$acc update host(shorteblst)
+        bead%shorteblst = shorteblst
+      end if
+
+      if (allocated(ishorteblst)) then        
+!$acc update host(ishorteblst)
+        bead%ishorteblst = ishorteblst
+      end if
+      
+
+      if (allocated(nshortvlst)) then        
+!$acc update host(nshortvlst)
+        bead%nshortvlst = nshortvlst
+      end if
+
+      if (allocated(shortvlst)) then        
+!$acc update host(shortvlst)
+        bead%shortvlst = shortvlst
+      end if
+
+      if (allocated(vblst)) then        
+!$acc update host(vblst)
+        bead%vblst = vblst
+      end if
+
+      if (allocated(ivblst)) then        
+!$acc update host(ivblst)
+        bead%ivblst = ivblst
+      end if
+
+      if (allocated(shortvblst)) then        
+!$acc update host(shortvblst)
+        bead%shortvblst = shortvblst
+      end if
+
+      if (allocated(ishortvblst)) then        
+!$acc update host(ishortvblst)
+        bead%ishortvblst = ishortvblst
+      end if
+
+      if(allocated(celle_glob))  then
+!$acc update host(celle_glob)
+        bead%celle_glob = celle_glob
+      endif
+
+      if(allocated(celle_pole))  then
+!$acc update host(celle_pole)
+        bead%celle_pole = celle_pole
+      endif
+
+      if(allocated(celle_plocnl))  then
+!$acc update host(celle_plocnl)
+        bead%celle_plocnl = celle_plocnl
+      endif
+      
+      if(allocated(celle_key))  then
+!$acc update host(celle_key)
+        bead%celle_key = celle_key
+      endif
+
+      if(allocated(celle_chg))  then
+!$acc update host(celle_chg)
+        bead%celle_chg = celle_chg
+      endif
+
+      if(allocated(cellv_key))  then
+!$acc update host(cellv_key)
+        bead%cellv_key = cellv_key
+      endif
+
+      if(allocated(cellv_glob))  then
+!$acc update host(cellv_glob)
+        bead%cellv_glob = cellv_glob
+      endif
+
+      if(allocated(cellv_loc))  then
+!$acc update host(cellv_loc)
+        bead%cellv_loc = cellv_loc
+      endif
+
+       if(allocated(cellv_jvdw))  then
+!$acc update host(cellv_jvdw)
+        bead%cellv_jvdw = cellv_jvdw
+      endif
       end
       
 
-      subroutine pushbead(istep,bead,skip_parameters,updateGPU)
+      subroutine pushbead(istep,bead,skip_parameters)
       use angang
       use angle
-      use atoms
+      use atomsMirror
       use atmlst
       use atmtyp
       use bond
@@ -1076,9 +1392,10 @@ c
       implicit none
       integer, intent(in) :: istep
       type(BEAD_TYPE), intent(inout) :: bead
-      LOGICAL, intent(in) :: skip_parameters,updateGPU
+      LOGICAL, intent(in) :: skip_parameters
       integer modnl
 
+!$acc wait
       ibead_loaded_glob = bead%ibead_glob
       ibead_loaded_loc = bead%ibead_loc
 
@@ -1106,15 +1423,11 @@ c
       z = bead%z
       v = bead%v
       a= bead%a
-      if(updateGPU) then
 !$acc update device(x(:),y(:),z(:),v(:,:),a(:,:)) async
-      endif
 
       nloc = bead%nloc
       glob = bead%glob
-      if(updateGPU) then
 !$acc update device(glob(:)) async
-      endif
 c
 c     STAT
 c
@@ -1170,7 +1483,6 @@ c
       bufbeg1 = bead%bufbeg1
       bufbeg2 = bead%bufbeg2
 
-      if(updateGPU) then
 !$acc update device(loc(:),ineignl(:)) async
 !$acc update device(repart(:),repartrec(:)) async
 !$acc update device(domlenrec(:),domlenpole(:),domlenpolerec(:)) async
@@ -1178,7 +1490,6 @@ c
 !$acc update device(bufbegpole(:)) async
 !$acc update device(buflen2(:),buf1(:),buf2(:)) async
 !$acc update device(bufbeg1(:),bufbeg2(:)) async
-      endif
 
 c
 c     VDW
@@ -1189,12 +1500,7 @@ c
         vdwglob = bead%vdwglob
         vdwglobnl = bead%vdwglobnl
         nvdwlocnl = bead%nvdwlocnl
-        nvlst = bead%nvlst
-        vlst = bead%vlst
-        if(updateGPU) then
-!$acc update device(nvdwbloc,nvdwlocnl,vdwglob(:),vdwglobnl(:)) async
-!$acc update device(nvlst(:),vlst(:,:)) async
-        endif
+!$acc update device(vdwglob(:),vdwglobnl(:)) async
       endif
 c
 c     BOND
@@ -1203,9 +1509,7 @@ c
         !write(0,*) "push BOND"
         nbondloc = bead%nbondloc
         bndglob = bead%bndglob
-        if(updateGPU) then
-!$acc update device(nbondloc,bndglob(:)) async
-        endif
+!$acc update device(bndglob(:)) async
       endif
 c
 c     STRETCH-BEND
@@ -1214,9 +1518,7 @@ c
         !write(0,*) "push STRETCH-BEND"
         nstrbndloc = bead%nstrbndloc
         strbndglob = bead%strbndglob
-        if(updateGPU) then
-!$acc update device(nstrbndloc,strbndglob(:)) async
-        endif
+!$acc update device(strbndglob(:)) async
       endif
 c
 c     UREY-BRADLEY
@@ -1225,9 +1527,7 @@ c
         !write(0,*) "push UREY-BRADLEY"
         nureyloc = bead%nureyloc
         ureyglob = bead%ureyglob
-        if(updateGPU) then
-!$acc update device(nureyloc,ureyglob(:)) async
-        endif
+!$acc update device(ureyglob(:)) async
       endif
 c
 c     ANGLE-ANGLE
@@ -1236,9 +1536,7 @@ c
         !write(0,*) "push ANGLE-ANGLE"
         nangangloc = bead%nangangloc
         angangglob = bead%angangglob
-        if(updateGPU) then
-!$acc update device(nangangloc,angangglob(:)) async
-        endif
+!$acc update device(angangglob(:)) async
       endif
 c
 c     OP-BENDING
@@ -1247,9 +1545,7 @@ c
         !write(0,*) "push OP-BENDING"
         nopbendloc = bead%nopbendloc
         opbendglob = bead%opbendglob
-        if(updateGPU) then
-!$acc update device(nopbendloc,opbendglob(:)) async
-        endif
+!$acc update device(opbendglob(:)) async
       endif
 c
 c     OP-DIST
@@ -1258,9 +1554,7 @@ c
         !write(0,*) "push  OP-DIST"
         nopdistloc = bead%nopdistloc
         opdistglob = bead%opdistglob
-        if(updateGPU) then
-!$acc update device(nopdistloc,opdistglob(:)) async
-        endif
+!$acc update device(opdistglob(:)) async
       endif
 c
 c     IMPROP
@@ -1269,9 +1563,7 @@ c
        ! write(0,*) "push IMPROP"
         niproploc = bead%niproploc
         impropglob = bead%impropglob
-        if(updateGPU) then
-!$acc update device(niproploc,impropglob(:)) async
-        endif
+!$acc update device(impropglob(:)) async
       endif
 c
 c     IMPTOR
@@ -1280,9 +1572,7 @@ c
        ! write(0,*) "push IMPTOR"
         nitorsloc = bead%nitorsloc
         imptorglob = bead%imptorglob
-        if(updateGPU) then
-!$acc update device(nitorsloc,imptorglob(:)) async
-        endif
+!$acc update device(imptorglob(:)) async
       endif
 c
 c     TORSION
@@ -1291,9 +1581,7 @@ c
         !write(0,*) "push TORSION"
         ntorsloc = bead%ntorsloc
         torsglob = bead%torsglob
-        if(updateGPU) then
-!$acc update device(ntorsloc,torsglob(:)) async
-        endif
+!$acc update device(torsglob(:)) async
       endif
 c
 c     PITORSION
@@ -1302,9 +1590,7 @@ c
         !write(0,*) "push PITORSION"
         npitorsloc = bead%npitorsloc
         pitorsglob = bead%pitorsglob
-        if(updateGPU) then
-!$acc update device(npitorsloc,pitorsglob(:)) async
-        endif
+!$acc update device(pitorsglob(:)) async
       endif
 c
 c     STRETCH-TORSION
@@ -1313,9 +1599,7 @@ c
         !write(0,*) "push STRETCH-TORSION"
         nstrtorloc = bead%nstrtorloc
         strtorglob = bead%strtorglob
-        if(updateGPU) then
-!$acc update device(nstrtorloc,strtorglob(:)) async
-        endif
+!$acc update device(strtorglob(:)) async
       endif
 c
 c     TORSION-TORSION
@@ -1324,9 +1608,7 @@ c
         !write(0,*) "push TORSION-TORSION"
         ntortorloc = bead%ntortorloc
         tortorglob = bead%tortorglob
-        if(updateGPU) then
-!$acc update device(ntortorloc,tortorglob(:)) async
-        endif
+!$acc update device(tortorglob(:)) async
       endif
 c
 c     ANGLE
@@ -1335,9 +1617,7 @@ c
         !write(0,*) "push ANGLE"
         nangleloc = bead%nangleloc
         angleglob = bead%angleglob
-        if(updateGPU) then
-!$acc update device(nangleloc,angleglob(:)) async
-        endif
+!$acc update device(angleglob(:)) async
       endif
 c
 c     CHARGE
@@ -1350,18 +1630,9 @@ c
         chgglob = bead%chgglob
         chgglobnl = bead%chgglobnl
         nionlocnl = bead%nionlocnl
-        if(updateGPU) then
-!$acc update device(nionloc,nionlocnl,nionrecloc) async
 !$acc update device(chgrecglob(:),chgglob(:),chgglobnl(:)) async
-        endif
       endif
-      if (use_charge.or.use_mpole) then
-        nelst = bead%nelst
-        elst = bead%elst
-        if(updateGPU) then
-!$acc update device(nelst(:),elst(:,:)) async
-        endif
-      endif
+
 c
 c     MULTIPOLE
 c
@@ -1373,13 +1644,11 @@ c
         npolebloc = bead%npolebloc
         poleglob = bead%poleglob
         poleloc = bead%poleloc
+        polelocnl = bead%polelocnl
         poleglobnl = bead%poleglobnl
         npolelocnl = bead%npolelocnl
-        if(updateGPU) then
-!$acc update device(npoleloc,npolebloc,poleglobnl) async
-!$acc update device(npolelocnl,npolerecloc) async
-!$acc update device(polerecglob(:),poleglob(:),poleloc(:)) async
-        endif
+!$acc update device(poleglobnl(:)) async
+!$acc update device(polerecglob(:),poleglob(:),poleloc(:),polelocnl(:)) async
       endif
 c
 c     POLARIZATION
@@ -1391,11 +1660,171 @@ c
         upalt = bead%upalt
         uind = bead%uind
         uinp = bead%uinp
-        if(updateGPU) then
 !$acc update device(udalt(:,:,:),upalt(:,:,:)) async
 !$acc update device(uind(:,:),uinp(:,:)) async
-!$acc wait
-        endif
+      endif
+
+      !NEIGHBORLIST
+
+      if (allocated(celle_loc)) then
+        bead%celle_loc = celle_loc
+!$acc update device(celle_loc) async
+      endif
+
+      if (allocated(celle_ploc)) then
+        celle_ploc = bead%celle_ploc 
+!$acc update device(celle_ploc) async
+      endif
+
+      if (allocated(celle_x)) then
+        celle_x = bead%celle_x 
+!$acc update device(celle_x) async
+      endif
+
+      if (allocated(celle_y)) then
+        celle_y = bead%celle_y 
+!$acc update device(celle_y) async
+      endif
+
+      if (allocated(celle_z)) then
+        celle_z = bead%celle_z 
+!$acc update device(celle_z) async
+      endif
+
+      if (allocated(nvlst)) then
+        nvlst = bead%nvlst 
+!$acc update device(nvlst) async
+      endif
+
+      if(allocated(vlst)) then
+        vlst = bead%vlst 
+!$acc update device(vlst) async
+      endif
+
+      if(allocated(nelst)) then
+        nelst = bead%nelst 
+!$acc update device(nelst) async
+      endif
+
+      if (allocated(elst)) then        
+        elst = bead%elst 
+!$acc update device(elst) async
+      end if
+
+      if (allocated(nelstc)) then        
+        nelstc = bead%nelstc 
+!$acc update device(nelstc) async
+      end if
+
+      if (allocated(shortelst)) then        
+        shortelst = bead%shortelst 
+!$acc update device(shortelst) async
+      end if
+
+      if (allocated(nshortelst)) then        
+        nshortelst = bead%nshortelst 
+!$acc update device(nshortelst) async
+      end if
+
+      if (allocated(nshortelstc)) then        
+        nshortelstc = bead%nshortelstc 
+!$acc update device(nshortelstc) async
+      end if
+
+      if (allocated(eblst)) then        
+        eblst = bead%eblst 
+!$acc update device(eblst) async
+      end if
+
+       if (allocated(ieblst)) then        
+        ieblst = bead%ieblst 
+!$acc update device(ieblst) async
+      end if
+
+      if (allocated(shorteblst)) then        
+        shorteblst = bead%shorteblst 
+!$acc update device(shorteblst) async
+      end if
+
+      if (allocated(ishorteblst)) then        
+        ishorteblst = bead%ishorteblst 
+!$acc update device(ishorteblst) async
+      end if
+      
+
+      if (allocated(nshortvlst)) then        
+        nshortvlst = bead%nshortvlst 
+!$acc update device(nshortvlst) async
+      end if
+
+      if (allocated(shortvlst)) then        
+        shortvlst = bead%shortvlst 
+!$acc update device(shortvlst) async
+      end if
+
+      if (allocated(vblst)) then        
+        vblst = bead%vblst 
+!$acc update device(vblst) async
+      end if
+
+      if (allocated(ivblst)) then        
+        ivblst = bead%ivblst 
+!$acc update device(ivblst) async
+      end if
+
+      if (allocated(shortvblst)) then        
+        shortvblst = bead%shortvblst 
+!$acc update device(shortvblst) async
+      end if
+
+      if (allocated(ishortvblst)) then        
+        ishortvblst = bead%ishortvblst 
+!$acc update device(ishortvblst) async
+      end if
+
+      if(allocated(celle_glob))  then
+        celle_glob = bead%celle_glob 
+!$acc update device(celle_glob) async
+      endif
+
+      if(allocated(celle_pole))  then
+        celle_pole = bead%celle_pole 
+!$acc update device(celle_pole) async
+      endif
+
+      if(allocated(celle_plocnl))  then
+        celle_plocnl = bead%celle_plocnl 
+!$acc update device(celle_plocnl) async
+      endif
+      
+      if(allocated(celle_key))  then
+        celle_key = bead%celle_key 
+!$acc update device(celle_key) async
+      endif
+
+      if(allocated(celle_chg))  then
+        celle_chg = bead%celle_chg 
+!$acc update device(celle_chg) async
+      endif
+
+      if(allocated(cellv_key))  then
+        cellv_key = bead%cellv_key 
+!$acc update device(cellv_key) async
+      endif
+
+      if(allocated(cellv_glob))  then
+        cellv_glob = bead%cellv_glob 
+!$acc update device(cellv_glob) async
+      endif
+
+      if(allocated(cellv_loc))  then
+        cellv_loc = bead%cellv_loc 
+!$acc update device(cellv_loc) async
+      endif
+
+       if(allocated(cellv_jvdw))  then
+        cellv_jvdw = bead%cellv_jvdw 
+!$acc update device(cellv_jvdw) async
       endif
 c
 c     TIME
@@ -1405,9 +1834,7 @@ c
       ! write(0,*) "pushbead done"
 
       !SYNCHRONIZE GPU with CPU
-      if(updateGPU) then 
 !$acc wait
-      endif
 
       end subroutine pushbead
 
@@ -1433,6 +1860,7 @@ c
       integer :: ibead,i,j,k,ierr
       real(8) :: buffer_energy(4)
 
+!$acc wait
 c
 c     reduce potential and kinetic energies
 c
@@ -1484,7 +1912,7 @@ c
         vel_centroid(:,:)=0.d0
         DO ibead=1,nbeads
           DO i=1,n
-            centroid(:,i)=centroid(j,i)+pos(:,i,ibead)
+            centroid(:,i)=centroid(:,i)+pos(:,i,ibead)
             vel_centroid(:,i)=vel_centroid(:,i)+vel(:,i,ibead)
           ENDDO
         ENDDO  
@@ -1495,7 +1923,7 @@ c
         DO i=1,n ; DO j=1,3          
           Ekcentroid=Ekcentroid+mass(i)*vel_centroid(j,i)**2
         ENDDO ; ENDDO
-        Ekcentroid=Ekcentroid*nbeads/convert
+        Ekcentroid=0.5d0*Ekcentroid/convert
 
         !if (ir) then
         !  k = mod(istep-1,nseg)+1
@@ -1531,6 +1959,7 @@ c       COMPUTE PRIMITIVE KINETIC ENERGY
         ENDDO  
         ekprim = (ekprim/nbeads
      &          + 0.5*nbeads*nfree*boltzmann*kelvin)/convert
+        !ekprim = ekprim/nbeads/convert + eksumpi_loc
 
 c       COMPUTE VIRIAL KINETIC ENERGY
         ekvir=0.d0
@@ -1543,11 +1972,13 @@ c       COMPUTE VIRIAL KINETIC ENERGY
             ENDDO
           ENDDO
         ENDDO
+        ekvir=0.5d0*ekvir/nbeads
 
-        presvir = prescon*( -dedv_mean + (Ekcentroid
-     &               - ekvir)/(3*nbeads*volbox) )
+        presvir = prescon*( -dedv_mean + 2.d0*(Ekcentroid
+     &               - ekvir)/(3.d0*volbox) )
 
-        ekvir=0.5d0*(nfree*boltzmann*kelvin/convert-ekvir/nbeads)
+        ekvir=0.5d0*nfree*boltzmann*kelvin/convert-ekvir
+        !ekvir= Ekcentroid - ekvir
         temppi = 2.0d0 * ekvir / (nfree * gasconst)
         temppi_cl = 2.0d0 * eksumpi_loc / (nfree * gasconst)
 
@@ -1607,8 +2038,6 @@ c    COMMUNICATION ROUTINES
       real*8 oterm,hterm
       integer :: i,iglob
 
-!$acc data  present(x,y,z,xold,yold,zold,v,a,mass,glob,use)
-
 c     Reassign the particules that have changed of domain
 c
 c     -> real space
@@ -1646,13 +2075,11 @@ c
       call allocstep
       time1 = mpi_wtime()
       timeclear = timeclear  + time1 - time0
-c      write(*,*) 'x 0 = ',x(1),y(1),v(1,1),a(1,1)
-c      write(*,*) 'istep 1 = ',istep
 
       !rebuild the neighbor lists
       if (use_list) call nblist(istep)
 
-!$acc end data
+!$acc wait
           
       end subroutine prepare_loaded_bead
 

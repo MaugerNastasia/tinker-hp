@@ -357,7 +357,7 @@ c     setup dynamics
 c
 
 !$acc enter data create(epotpi_loc,eksumpi_loc,etotpi_loc,ekinpi_loc)
-!$acc&           create(eintrapi_loc,einterpi_loc)
+!$acc&           create(eintrapi_loc,einterpi_loc,temppi)
 
       call mdinit(dt)      
       call allocpi()      
@@ -365,9 +365,8 @@ c
       do ibead = 1, nbeadsloc
         call mdinitbead(beadsloc(ibead)%ibead_glob,dt,restart) 
         call dedvcalc()
-        call initbead(0,beadsloc(ibead),.FALSE.,.TRUE.)
-        call resize_nl_arrays_bead(0,beadsloc(ibead))           
-        call savebeadnl(0,beadsloc(ibead),.TRUE.)          
+        call initbead(0,beadsloc(ibead),.FALSE.)
+        call savebeadnl(0,beadsloc(ibead))          
       end do
 
       if(contract) then
@@ -493,16 +492,16 @@ c       GATHER polymer info at ranktot 0 (arrays are allocated inside the subrou
      &                            ,.TRUE.,.FALSE.,.FALSE.)
           do ibead = 1, nbeadsloc_ctr
             call pushbead(istep,beadsloc_ctr(ibead)
-     &                            ,.false.,.true.)
+     &                            ,.false.)
 !$acc data present(epotpi_loc,eksumpi_loc,etotpi_loc,ekinpi_loc)
-!$acc&     present(eintrapi_loc,x,y,z,a)
+!$acc&     present(eintrapi_loc,temppi,x,y,z,a)
             call prepare_loaded_bead(istep)            
             call compute_grad_slow()
 !$acc end data
-            call resize_nl_arrays_bead(istep,beadsloc_ctr(ibead))
-            call savebeadnl(istep,beadsloc_ctr(ibead),.true.)
             call initbead(istep,beadsloc_ctr(ibead)
-     &                           ,.false.,.true.)
+     &                           ,.false.)
+            call savebeadnl(istep,beadsloc_ctr(ibead))
+            
           enddo
           call gather_polymer(polymer_ctr,beadsloc_ctr
      &                          ,.FALSE.,.FALSE.,.TRUE.)
@@ -547,16 +546,16 @@ c       BROADCAST polymer info from ranktot 0 to everyone else
 
         !write(0,*) "ranktot",ranktot,"entering baoabpi2"
         do ibead = 1, nbeadsloc
-          write(0,*) "start of bead",ibead
+          !write(0,*) "start of bead",ibead
           time00=mpi_wtime()
           ! LOAD current bead
           call pushbead(istep,beadsloc(ibead)
-     &          ,skip_parameters_copy,.true.)
+     &          ,skip_parameters_copy)
           time01=mpi_wtime()
           timepush=timepush+time01-time00
 
           
-          write(0,*) "before prepare"
+          !write(0,*) "before prepare"
 !$acc data present(epotpi_loc,eksumpi_loc,etotpi_loc,ekinpi_loc)
 !$acc&     present(eintrapi_loc,x,y,z,v,a)
           ! REASSIGN all positions in the loaded bead
@@ -565,49 +564,45 @@ c       BROADCAST polymer info from ranktot 0 to everyone else
                  
 
           ! APPLY B (compute gradient)
-          write(0,*) "before apply_b_pi"
+          !write(0,*) "before apply_b_pi"
           time00=mpi_wtime()
           call apply_b_pi(istep,dt)
           time01=mpi_wtime()
           timebaoab2=timebaoab2+time01-time00
           time00=mpi_wtime()
 
-          write(0,*) "before kinetic"
+          !write(0,*) "before kinetic"
           ! COMPUTE kinetic energy of loaded bead
-          call kinetic (eksumpi_loc,ekinpi_loc,temppi)
-          etotpi_loc = eksumpi_loc + epotpi_loc
+          call kineticgpu (eksumpi_loc,ekinpi_loc,temppi)
+!$acc wait
           ! COMPUTE VIRIAL dE/dV
 
           !write(0,*) "ranktot",ranktot,"entering dedvcalc"
-          write(0,*) "before dedvcalc"
+          !write(0,*) "before dedvcalc"
           call dedvcalc()
           time01=mpi_wtime()
           timededvcalc=timededvcalc+time01-time00  
 
-          write(0,*) "before mdsavebeads"
+          !write(0,*) "before mdsavebeads"
           ! SAVE bead trajectory
           call mdsavebeads (istep,dt)    
 
 !$acc end data              
-                   
-          write(0,*) "before resize_nl_arrays_bead"
-          time00=mpi_wtime()
-          call resize_nl_arrays_bead(istep,beadsloc(ibead))   
-          ! STORE new neighborlist if necessary
-          !write(0,*) "ranktot",ranktot,"entering savebeadnl" 
-          write(0,*) "before savebeadnl"
-          if(.not.skip_parameters_copy) then
-            call savebeadnl(istep,beadsloc(ibead),.TRUE.)
-          endif
 
-          write(0,*) "before initbead"
+          !write(0,*) "before initbead"
           ! SAVE current bead
           call initbead(istep,beadsloc(ibead)
-     &          ,skip_parameters_copy,.TRUE.)
+     &          ,skip_parameters_copy)
           time01=mpi_wtime()
           timeinit=timeinit+time01-time00
 
-          write(0,*) "end of bead",ibead
+          time00=mpi_wtime()
+          ! STORE new neighborlist if necessary
+          !write(0,*) "before savebeadnl"
+          if(.not.skip_parameters_copy) then
+            call savebeadnl(istep,beadsloc(ibead))
+          endif
+
 
         end do
 
@@ -703,8 +698,8 @@ c      endif
 
         
         do k=1,nbeadsloc_ctr
-          call resize_nl_arrays_bead(0,beadsloc_ctr(k))   
-          call pushbead(0,beadsloc_ctr(k),.FALSE.,.FALSE.)
+          call resize_nl_arrays_bead(beadsloc_ctr(k))   
+          call pushbead(0,beadsloc_ctr(k),.FALSE.)
 !$acc data  present(x,y,z,xold,yold,zold,v,a,mass,glob,use)
           call ddpme3d
           call reinitnl(0)
@@ -712,9 +707,8 @@ c      endif
           call mechanicstep(0)
           call nblist(0)
 !$acc end data
-          call initbead(0,beadsloc_ctr(k),.FALSE.,.FALSE.)
-          call resize_nl_arrays_bead(0,beadsloc_ctr(k))   
-          call savebeadnl(0,beadsloc_ctr(k),.FALSE.)
+          call initbead(0,beadsloc_ctr(k),.FALSE.)
+          call savebeadnl(0,beadsloc_ctr(k))
         enddo        
         
         

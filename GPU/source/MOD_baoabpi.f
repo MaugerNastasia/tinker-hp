@@ -57,50 +57,48 @@ c
       real(r_p) part1,part2
       real(r_p) stress(3,3)
       real(r_p) time0,time1
-      
+
+!$acc wait
+
 !$acc data present(epotpi_loc,eintrapi_loc)
 !$acc&     present(x,y,z,xold,yold,zold,v,a,mass,glob,use)
-
-!$acc update host(x,y,z)
-      write(0,*) "nbloc=",nbloc
-      write(0,*) x(1),y(1),z(1)
-      write(0,*) x(n),y(n),z(n)
  
-      write(0,*) "prmem_requestm"
       call prmem_requestm(derivs,3,nbloc,async=.true.)
-      write(0,*) "set_to_zero1m"
       call set_to_zero1m(derivs,3*nbloc,rec_queue)
 !$acc wait
 c
 c     get the potential energy and atomic forces
 c
       if(contract) then
+
         call gradfast(eintrapi_loc,derivs)
+!$acc wait
         call commforcesrespa(derivs,.true.)
+        call reduceen(eintrapi_loc)
+!$acc host_data use_device(eintrapi_loc)
+!$acc wait
+        call MPI_BCAST(eintrapi_loc,1,MPI_RPREC,0,COMM_TINKER,ierr)
+!$acc end host_data
+
       else
-        write(0,*) "gradient"
+
         call gradient (epotpi_loc,derivs)     
-        write(0,*) "commforces"
+!$acc wait
         call commforces(derivs) 
-      endif
-c
-c     MPI : get total energy (and allreduce the virial)
-c
-      write(0,*) "reduceen"
-      call reduceen(epotpi_loc)
-      write(0,*) "MPI_BCAST"
+        call reduceen(epotpi_loc)
 !$acc host_data use_device(epotpi_loc)
 !$acc wait
-      call MPI_BCAST(epotpi_loc,1,MPI_RPREC,0,COMM_TINKER,ierr)
+        call MPI_BCAST(epotpi_loc,1,MPI_RPREC,0,COMM_TINKER,ierr)
 !$acc end host_data
+
+      endif
+  
 
 c
 c     use Newton's second law to get the next accelerations;
 c     find the full-step velocities using the BAOAB recursion
 c
-c      write(*,*) 'x 1 = ',x(1),y(1),v(1,1),a(1,1)
 
-      write(0,*) "update vel"
 !$acc parallel loop collapse(2) present(derivs) async
       do i = 1, nloc
         do j = 1, 3
@@ -114,7 +112,6 @@ c      write(*,*) 'x 1 = ',x(1),y(1),v(1,1),a(1,1)
       enddo
 !$acc wait
 
-      write(0,*) "end apply_b"
 
 !$acc end data
 
@@ -186,13 +183,13 @@ c         propagate volume velocity from previous step
         call apply_a_pi(pos_full,vel_full,dt2)
 
 c         update Ekcentroid  and presvir     
-        presvir=presvir-prescon*(Ekcentroid/(3*nbeads*volbox))
+        presvir=presvir-prescon*(2.d0*Ekcentroid/(3.d0*volbox))
         Ekcentroid=0
         DO i=1,n ; DO j=1,3          
           Ekcentroid=Ekcentroid+mass(i)*vel_full(j,i,1)**2
         ENDDO ; ENDDO
-        Ekcentroid=Ekcentroid/convert        
-        presvir=presvir+prescon*(Ekcentroid/(3*nbeads*volbox))
+        Ekcentroid=0.5d0*Ekcentroid/convert/nbeads        
+        presvir=presvir+prescon*(2.d0*Ekcentroid/(3.d0*volbox))
 
         if(isobaric) then
 c         propagate volume velocity
