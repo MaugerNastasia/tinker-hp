@@ -210,6 +210,10 @@ c
 c      call mdrest (istep)
 
 
+c
+c     At the end of each sgement compute the the new gamma and the IR
+c     spectrum if needed
+c
       if ((mod(istep,nseg).eq.0).and.adaptive) then
         if (ir) then
           call irspectra

@@ -34,9 +34,6 @@ c
       real*8, allocatable :: Cvf_average_type(:,:)
       real*8, allocatable :: Cff_average_type(:,:)
       real*8, allocatable :: dFDR_average_type(:,:)
-      integer, allocatable :: adqtb_type(:)
-      integer, allocatable :: ntype(:)   
-      integer :: typemax
       real*8, allocatable :: vad_piston(:),fad_piston(:)
       real*8, allocatable :: gamma_piston(:)
       real*8, allocatable :: mCvv_average_piston(:)
@@ -44,5 +41,8 @@ c
       real*8, allocatable :: Cff_average_piston(:)
       real*8, allocatable :: dFDR_average_piston(:)
       real*8 A_gamma_piston
+      integer, allocatable :: adqtb_type(:)
+      integer, allocatable :: ntype(:)   
+      integer :: typemax
       save
       end

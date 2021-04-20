@@ -64,6 +64,10 @@ c
 
       if (allocated(repartnoise)) deallocate (repartnoise)
       allocate(repartnoise(n))
+
+c
+c     Order the atom type for the adQTB
+c
       allocate(ntype(maxtyp))
       allocate(adqtb_type(1:n))
       adqtb_type=0
@@ -90,28 +94,14 @@ c
             adqtb_type(i)=ntype(k)
           endif
       enddo 
-
 !
-!     constant in Kcal/mol and ps
 !
-      !hbar=(planck*1.d11*avogadro)/(2*pi)
-
-
-!     Arguments
+!     Kernel crreation
 !
-      domega = (2.*pi)/(3.*nseg*dt)
-!
-!     allocate Ht and noise arrays
-!
-c      allocate(noise(3,n,-nseg:2*nseg-1))
       if (allocated(Htilde)) deallocate (Htilde)
       allocate (Htilde(0:3*nseg-1,1:typemax))
-!
-c      allocate (rt(3,n,1:nseg))
 
-!     create Htilde
-!     
-c      open(1,file='H_omega.out')
+      domega = (2.*pi)/(3.*nseg*dt)
 
       Htilde=0.0
       do i=1,typemax
@@ -119,11 +109,9 @@ c      open(1,file='H_omega.out')
           omega=k*domega
             if  (k .eq. 0) then
               Htilde(k,i)=sqrt(boltzmann*kelvin)
-c              write(1,'(2e20.5)') omega,Htilde(k,i)
             else if (noQTB) then
               Htilde(k,i)=sqrt(boltzmann*kelvin)
               Htilde(3*nseg-k,i)=sqrt(boltzmann*kelvin)
-c              write(1,'(2e20.5)') omega, Htilde(k,i)
             else
               C_omega=(1-2*exp(-gamma*dt)*cos(omega*dt)+exp(-2*gamma*dt)
      &                )/((gamma**2+omega**2)*dt**2)
@@ -133,17 +121,13 @@ c              write(1,'(2e20.5)') omega, Htilde(k,i)
               f_omega=1.0/(1+exp((abs(omega)-omegacut)/omegasmear))
               Htilde(k,i)=sqrt(theta_tilde*f_omega*C_omega)
               Htilde(3*nseg-k,i)=sqrt(theta_tilde*f_omega*C_omega)
-c                  write(1,'(2e20.5)') omega, Htilde(k,i)
-c                  write(1,'(6e20.5)') omega, C_omega, theta
-c     &                                _tilde, f_omega,Htilde(k,i)
-c     &                  ,(3*nseg-1)*dt*C_omega*theta_tilde*f_omega
             endif
           enddo
       enddo
-!
-c      close(1)
 
-!     Initialisation for adQTB-r
+c
+c     Initialisation for adQTB-r
+c
       if (adaptive) then
         nad=int(omegacut/domega)
 
@@ -182,6 +166,10 @@ c      close(1)
             gamma_piston(k)=gammapiston
           enddo
           
+
+c
+c         Potential correction
+c
           allocate(corr_pot_ratio(0:nad-1))
                
           corr_pot_ratio(:)=0d0

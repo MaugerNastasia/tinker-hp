@@ -19,25 +19,24 @@ c     and H Dammak PRL 103, 190601 (2009)
 c
       module qtb 
       implicit none
+      integer :: nseg,nad
+      integer compteur, skipseg, startsavespec
+      integer, allocatable :: repartnoise(:)
       real*8 omegacut
       real*8 domega
       real*8 omegasmear
       real*8 omegamax
+      real*8 Tseg
       real*8, allocatable :: Htilde(:,:)
       real*8, allocatable :: rt(:,:,:)
+      real*8, allocatable :: corr_pot_ratio(:)
+      real*8, allocatable :: Cmumu_average(:,:)
+      real*8, allocatable :: vad(:,:,:)
       real*8, pointer :: noise(:,:,:)
-      integer :: nseg
-      integer, allocatable :: repartnoise(:)
       logical :: noQTB
       logical adaptive
       logical :: corr_pot
-      real*8, allocatable :: corr_pot_ratio(:)
       logical :: register_spectra
       logical :: ir
-      integer compteur, skipseg, startsavespec
-      real*8, allocatable :: Cmumu_average(:,:)
-      real*8, allocatable :: vad(:,:,:)
-      real*8 Tseg
-      integer :: nad
       save 
       end

@@ -50,7 +50,6 @@ c     Allocation of the different used for the adqtb
       allocate(mCvv_type(0:nad-1,1:typemax))
       allocate(Cvf_type(0:nad-1,1:typemax))
       allocate(dFDR_type(0:nad-1,1:typemax))
-c      allocate(Cff_type(0:nad-1,1:typemax))
 c
 
       s = 3*nseg
@@ -60,16 +59,16 @@ c
             do j=0,nad-1
                   mCvv_type(j,i)=0d0
                   Cvf_type(j,i)=0d0
-c                  Cff_type(j,i)=0d0
                   dFDR_type(j,i)=0d0
             enddo
       enddo
+c
+c     Initialization while using startsavespec
 c
       if (compteur .le. startsavespec) then
             mCvv_average_type=0d0
             Cvf_average_type=0d0
             dFDR_average_type=0d0
-c            Cff_average_type=0d0
       endif
 
       Cvf_file='Cvf.out'
@@ -79,26 +78,21 @@ c            Cff_average_type=0d0
       DeltaFDR_file='DeltaFDT.out'
 
       open(68, file=Cvf_file)
-c      open(108, file=Cff_file)
       open(78, file=mCvv_file)
       open(88, file=DeltaFDR_file)
       open(70, file='gamma_history.out',access='append')
-c      open(98,file='gamma_restart.out')
-c
+
       write(68,499,advance='no') 'Frequency' 
-c      write(108,499,advance='no') 'Frequency' 
       write(78,499,advance='no') 'Frequency'
       write(88,499,advance='no') 'Frequency'
       write(70,499,advance='no') 'Frequency'
-c      write(98,499,advance='no') 'Frequency'
+
   499 format(6x,A)
             do i=1,typemax
                   write(68,500,advance='no') name(i)
-c                  write(108,500,advance='no') name(i)
                   write(78,500,advance='no') name(i)
                   write(88,500,advance='no') name(i)
                   write(70,500,advance='no') name(i)
-c                 write(98,500,advance='no') name(i)
   500             format (6x,'Type_',A)
             enddo
       close(70)
@@ -107,7 +101,6 @@ c                 write(98,500,advance='no') name(i)
       close(88)
       close(98)
       open(68, file=Cvf_file,access='append')
-c      open(108, file=Cff_file)
       open(78, file=mCvv_file,access='append')
       open(88, file=DeltaFDR_file,access='append')
       open(70, file='gamma_history.out',access='append')
@@ -161,18 +154,12 @@ c
      &,MPI_SUM,0,
      $     MPI_COMM_WORLD,ierr)
       end if
-c      if (rank.eq.0) then
-c        call MPI_REDUCE(MPI_IN_PLACE,Cff_type,typemax*nad,MPI_REAL8
-c     &,MPI_SUM,0,
-c     $     MPI_COMM_WORLD,ierr)
-c      else
-c        call MPI_REDUCE(Cff_type,Cff_type,typemax*nad,MPI_REAL8
-c     &,MPI_SUM,0,
-c     $     MPI_COMM_WORLD,ierr)
-c      end if
 
       if (rank.eq.0) then 
 
+c
+c     Compute Delta FDR
+c
         do i=1,typemax
          do j=0,nad-1 
            dFDR_type(:,i)=mCvv_type(:,i)
@@ -181,9 +168,8 @@ c      end if
          enddo
         enddo
 c
-c        if (compteur .lt. 100) then
-c             dFDR_type(80:120)=0.
-c        endif
+c       Compute the new gamma
+c
          do i=1,typemax
             do j=0,nad-1
                   gamma_type(j,i)=max(
@@ -193,6 +179,9 @@ c        endif
      &                  ,0.)
             enddo
         enddo  
+c
+c       Compute the different spectrum used for the adaptation
+c
         mCvv_average_type=mCvv_average_type+mCvv_type
         Cvf_average_type=Cvf_average_type+Cvf_type
         dFDR_average_type=dFdr_average_type+dFdr_type
