@@ -91,7 +91,7 @@ c
       logical use_polar,use_solv
       logical use_pself,use_polarshortreal
       logical use_preal,use_prec
-!$acc declare create(use_mpole,use_polar)
+!$acc declare create(use_mpole,use_polar,use_charge)
       end module
 
       module potent

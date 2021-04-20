@@ -259,6 +259,9 @@ c
         !     CHARGE
         !
         integer :: nionrecloc, nionloc, nionlocnl
+        integer nionlocloop,nionlocnlloop
+        integer nionlocnlb,nionlocnlb_pair,nionlocnlb2_pair
+     &       ,nshortionlocnlb2_pair
         integer, allocatable :: chgrecglob(:)
         integer, allocatable ::chgglob(:)
         integer, allocatable :: chgglobnl(:)
@@ -275,10 +278,14 @@ c
         !     MULTIPOLE
         !
         integer :: npolerecloc,npoleloc,npolebloc, npolelocnl
+        integer :: npolelocnlb,npolelocnlb_pair
+        integer :: npolelocnlb2_pair,nshortpolelocnlb2_pair
         integer, allocatable :: polerecglob(:)
         integer, allocatable :: poleglob(:)
-        integer, allocatable :: poleloc(:),polelocnl(:)
+        integer, allocatable :: poleloc(:),polelocnl(:),polerecloc(:)
         integer, allocatable :: poleglobnl(:)
+        integer npolerecloc_old,npolereclocloop
+        integer npolelocloop, npolelocnlloop,npoleblocloop
         !
         !      POLARIZATION
         !
@@ -292,13 +299,32 @@ c
         integer :: nvdwblocloop
         integer :: nvdwlocnlb2_pair,nshortvdwlocnlb2_pair
         integer, allocatable :: vdwglob(:)
-        integer, allocatable :: vdwglobnl(:)
+        integer, allocatable :: vdwglobnl(:),vdwlocnl(:)
         integer, allocatable :: nvlst(:),vlst(:,:)
         integer, allocatable :: nshortvlst(:),shortvlst(:,:)
         integer, allocatable :: vblst(:),ivblst(:)
         integer, allocatable :: shortvblst(:),ishortvblst(:)
         integer,allocatable :: cellv_key(:),cellv_glob(:)
      &                        ,cellv_loc(:),cellv_jvdw(:)
+
+
+        !
+        !     SCALING FACTORS
+        !
+        integer :: n_vscale,n_mscale,n_cscale
+        integer :: n_uscale,n_dpscale,n_dpuscale
+        integer,allocatable :: vcorrect_ik(:,:)
+        real(t_p), allocatable :: vcorrect_scale(:)
+        integer,allocatable :: mcorrect_ik(:,:)
+        real(t_p), allocatable :: mcorrect_scale(:)
+        integer,allocatable :: ccorrect_ik(:,:)
+        real(t_p), allocatable :: ccorrect_scale(:)
+        integer,allocatable :: ucorrect_ik(:)
+        real(t_p), allocatable :: ucorrect_scale(:)
+        integer,allocatable :: dpcorrect_ik(:)
+        real(t_p), allocatable :: dpcorrect_scale(:)
+        integer,allocatable :: dpucorrect_ik(:)
+        real(t_p), allocatable :: dpucorrect_scale(:)
         !
         !     STAT
         !
@@ -390,6 +416,7 @@ c
         omkpi(1)=0
         omkpi(:)=sqrt(omkpi)*(nbeads*boltzmann*kelvin/hbar)
         eigmattr=transpose(eigmat)
+!$acc enter data copyin(eigmat,eigmattr,omkpi)
         deallocate(WORK)
 
 
@@ -428,8 +455,9 @@ c
       endif
 
       if(allocated(beadsloc)) deallocate(beadsloc)
-      allocate(beadsloc(nbeadsloc))
+      allocate(beadsloc(nbeadsloc))      
       do i=1,nbeadsloc
+!        write(0,*) "allocbea=",i,"/",nbeadsloc
         call allocbead(beadsloc(i))
         beadsloc(i)%ibead_loc = i
         beadsloc(i)%ibead_glob = rank_beadloc*int(nbeads/ncomm) + i
@@ -509,6 +537,7 @@ c
       if (use_vdw) then
         allocate(bead%vdwglob(n))
         allocate(bead%vdwglobnl(n))
+        allocate(bead%vdwlocnl(n))
       end if
 
       if (use_bond) then
@@ -582,11 +611,9 @@ c
         allocate(bead%poleloc(n))
         allocate(bead%poleglobnl(n))
         allocate(bead%polelocnl(n))
+        allocate(bead%polerecloc(n))
       end if
-
       
-
-
       end subroutine
 
       subroutine deallocate_bead(bead)
@@ -624,6 +651,7 @@ c
         !if (allocated(bead%locnl)) deallocate(bead%locnl)
         if (allocated(bead%vdwglob)) deallocate(bead%vdwglob)
         if (allocated(bead%vdwglobnl)) deallocate(bead%vdwglobnl)
+        if (allocated(bead%vdwlocnl)) deallocate(bead%vdwlocnl)
         if (allocated(bead%bndglob)) deallocate(bead%bndglob)
         if (allocated(bead%strbndglob)) deallocate(bead%strbndglob)
         if (allocated(bead%ureyglob)) deallocate(bead%ureyglob)
@@ -647,6 +675,7 @@ c
         if (allocated(bead%polerecglob)) deallocate(bead%polerecglob)
         if (allocated(bead%poleglob)) deallocate(bead%poleglob)
         if (allocated(bead%poleloc)) deallocate(bead%poleloc)
+        if (allocated(bead%polerecloc)) deallocate(bead%polerecloc)
         if (allocated(bead%polelocnl)) deallocate(bead%polelocnl)
         if (allocated(bead%poleglobnl)) deallocate(bead%poleglobnl)
 
@@ -729,6 +758,7 @@ c
       logical,intent(in) :: skip_parameters
       integer ibead,i,modnl
 
+      !write(0,*) "initbead pos"
 !$acc wait
 c
 c     positions, speed, mass
@@ -740,6 +770,8 @@ c
       bead%z = z
       bead%v = v
       bead%a = a
+
+      !write(0,*) "initbead ener"
 
 !$acc update host(eksumpi_loc,ekinpi_loc)
       if(contract) then
@@ -759,6 +791,8 @@ c
       bead%dedv = dedv
 
 !$acc update host(glob(:))
+      !write(0,*) "initbead glob",allocated(glob),allocated(bead%glob)
+
       bead%nloc = nloc
       bead%glob = glob
 c
@@ -785,6 +819,8 @@ c
 c
 c     parallelism
 c
+      !write(0,*) "initbead bloc",nblocrecdir
+
       bead%nbloc = nbloc
       bead%nlocrec = nlocrec
       bead%nblocrec = nblocrec
@@ -825,12 +861,20 @@ c
 c
 c     VDW 
 c
+      !write(0,*) "initbead vdw"
+
       if (use_vdw) then
-!$acc update host(vdwglob(:),vdwglobnl(:))
+!$acc update host(vdwglob(:),vdwglobnl(:),vdwlocnl(:))
         bead%nvdwbloc = nvdwbloc
         bead%vdwglob = vdwglob
         bead%vdwglobnl = vdwglobnl
+        bead%vdwlocnl = vdwlocnl
         bead%nvdwlocnl = nvdwlocnl
+        bead%nvdwlocnlb = nvdwlocnlb
+        bead%nvdwlocnlb_pair = nvdwlocnlb_pair
+        bead%nvdwlocnlb2_pair = nvdwlocnlb2_pair
+        bead%nshortvdwlocnlb2_pair = nshortvdwlocnlb2_pair
+        bead%nvdwblocloop = nvdwblocloop
       end if
 c
 c     BONDS
@@ -939,6 +983,7 @@ c
 c
 c     CHARGE
 c
+      !write(0,*) "initbead charge"
       if (use_charge) then
 !$acc update host(chgrecglob(:),chgglob(:),chgglobnl(:))
         bead%chgrecglob = chgrecglob
@@ -947,6 +992,12 @@ c
         bead%nionloc = nionloc
         bead%chgglobnl = chgglobnl
         bead%nionlocnl = nionlocnl
+        bead%nionlocloop = nionlocloop
+        bead%nionlocnlloop = nionlocnlloop
+        bead%nionlocnlb = nionlocnlb
+        bead%nionlocnlb_pair = nionlocnlb_pair
+        bead%nionlocnlb2_pair = nionlocnlb2_pair
+        bead%nshortionlocnlb2_pair = nshortionlocnlb2_pair
       end if
 c      if ((use_charge.or.use_mpole).and.(modnl.eq.0)) then
 c        nelstpi(1:nlocnl,ibead) = nelst
@@ -955,19 +1006,35 @@ c      end if
 c
 c     MULTIPOLE
 c
+      !,*) "initbead mpole"
       if (use_mpole) then
 !$acc update host(polerecglob(:),poleglob(:),poleloc(:)) async
-!$acc update host(polelocnl(:)) async
+!$acc update host(polelocnl(:),polerecloc(:)) async
 !$acc wait
-        bead%polerecglob(1:nlocrec) = polerecglob(:)
+        if(nlocrec>0) then
+          bead%polerecglob(1:nlocrec) = polerecglob(:)
+        endif
         bead%npolerecloc = npolerecloc
         bead%poleglob(1:nbloc) = poleglob(:)
         bead%poleloc = poleloc
+        bead%polerecloc = polerecloc
         bead%npoleloc = npoleloc
         bead%npolebloc = npolebloc
-        bead%poleglobnl(1:nlocnl) = poleglobnl
+        if(nlocnl>0) then
+          bead%poleglobnl(1:nlocnl) = poleglobnl
+        endif
         bead%npolelocnl = npolelocnl
         bead%polelocnl = polelocnl
+        bead%npolelocnlb = npolelocnlb
+        bead%npolelocnlb_pair = npolelocnlb_pair
+        bead%npolelocnlb2_pair = npolelocnlb2_pair
+        bead%nshortpolelocnlb2_pair = nshortpolelocnlb2_pair
+        bead%npolerecloc_old = npolerecloc_old
+        bead%npolelocloop = npolelocloop
+        bead%npolelocnlloop = npolelocnlloop
+        bead%npoleblocloop = npoleblocloop
+        bead%npolereclocloop = npolereclocloop
+        
       end if
 c
 c     POLARIZATION
@@ -1005,11 +1072,16 @@ c
       use uprior
       use units
       use mdstuf
+      use polpot
+      use chgpot
+      use mplpot
+      use vdwpot
       implicit none
       TYPE(BEAD_TYPE), intent(inout) :: bead
       integer nblocrecdirmax,modnl
 
-      !nlocnlmax = maxval(nlocnlpi)
+!$acc wait
+
       if (allocated(nvlst)) then
         if (allocated(bead%nvlst)) deallocate(bead%nvlst)
         allocate(bead%nvlst(size(nvlst)))
@@ -1165,9 +1237,79 @@ c
         allocate(bead%cellv_loc(size(cellv_loc)))
       endif
 
-       if(allocated(cellv_jvdw))  then
+      if(allocated(cellv_jvdw))  then
         if (allocated(bead%cellv_jvdw)) deallocate(bead%cellv_jvdw)
         allocate(bead%cellv_jvdw(size(cellv_jvdw)))
+      endif
+
+      if(allocated(vcorrect_ik))  then
+        if (allocated(bead%vcorrect_ik)) deallocate(bead%vcorrect_ik)
+        allocate(bead%vcorrect_ik(size(vcorrect_ik,1)
+     &        ,size(vcorrect_ik,2)))
+      endif
+
+      if(allocated(vcorrect_scale))  then
+        if (allocated(bead%vcorrect_scale)) 
+     &        deallocate(bead%vcorrect_scale)
+        allocate(bead%vcorrect_scale(size(vcorrect_scale)))
+      endif
+
+      if(allocated(mcorrect_ik))  then
+        if (allocated(bead%mcorrect_ik)) deallocate(bead%mcorrect_ik)
+        allocate(bead%mcorrect_ik(size(mcorrect_ik,1)
+     &        ,size(mcorrect_ik,2)))
+      endif
+
+      if(allocated(mcorrect_scale))  then
+        if (allocated(bead%mcorrect_scale)) 
+     &        deallocate(bead%mcorrect_scale)
+        allocate(bead%mcorrect_scale(size(mcorrect_scale)))
+      endif
+
+      if(allocated(ccorrect_ik))  then
+        if (allocated(bead%ccorrect_ik)) deallocate(bead%ccorrect_ik)
+        allocate(bead%ccorrect_ik(size(ccorrect_ik,1)
+     &        ,size(ccorrect_ik,2)))
+      endif
+
+      if(allocated(ccorrect_scale))  then
+        if (allocated(bead%ccorrect_scale)) 
+     &        deallocate(bead%ccorrect_scale)
+        allocate(bead%ccorrect_scale(size(ccorrect_scale)))
+      endif
+
+      if(allocated(ucorrect_ik))  then
+        if (allocated(bead%ucorrect_ik)) deallocate(bead%ucorrect_ik)
+        allocate(bead%ucorrect_ik(size(ucorrect_ik)))
+      endif
+
+       if(allocated(ucorrect_scale))  then
+        if (allocated(bead%ucorrect_scale)) 
+     &        deallocate(bead%ucorrect_scale)
+        allocate(bead%ucorrect_scale(size(ucorrect_scale)))
+      endif
+
+      if(allocated(dpcorrect_ik))  then
+        if (allocated(bead%dpcorrect_ik)) deallocate(bead%dpcorrect_ik)
+        allocate(bead%dpcorrect_ik(size(dpcorrect_ik)))
+      endif
+
+      if(allocated(dpcorrect_scale))  then
+        if (allocated(bead%dpcorrect_scale)) 
+     &        deallocate(bead%dpcorrect_scale)
+        allocate(bead%dpcorrect_scale(size(dpcorrect_scale)))
+      endif
+
+      if(allocated(dpucorrect_ik))  then
+        if (allocated(bead%dpucorrect_ik)) 
+     &        deallocate(bead%dpucorrect_ik)
+        allocate(bead%dpucorrect_ik(size(dpucorrect_ik)))
+      endif
+
+       if(allocated(dpucorrect_scale))  then
+        if (allocated(bead%dpucorrect_scale)) 
+     &        deallocate(bead%dpucorrect_scale)
+        allocate(bead%dpucorrect_scale(size(dpucorrect_scale)))
       endif
 
 
@@ -1177,13 +1319,19 @@ c
       use domdec
       use neigh
       use potent
+      use polpot
+      use chgpot
+      use mplpot
+      use vdwpot
       implicit none
       TYPE(BEAD_TYPE), intent(inout) :: bead
       integer, intent(in) ::  istep
       integer modnl
 
+!$acc wait
 
       modnl = mod(istep,ineigup)
+      !write(0,*) "modnl=",modnl,istep,ineigup
 
       if(modnl==0) call resize_nl_arrays_bead(bead)
 c
@@ -1355,6 +1503,88 @@ c
 !$acc update host(cellv_jvdw)
         bead%cellv_jvdw = cellv_jvdw
       endif
+
+      ! SCALING FACTORS
+      bead%n_vscale=n_vscale
+      bead%n_mscale=n_mscale
+      bead%n_cscale=n_cscale
+      bead%n_uscale=n_uscale
+      bead%n_dpscale=n_dpscale
+      bead%n_dpuscale=n_dpuscale
+      
+      if(allocated(vcorrect_ik) .and.size(vcorrect_ik)>0) then
+      !  write(0,*) "vcorrect_ik",size(vcorrect_ik)
+!$acc update host(vcorrect_ik)
+        bead%vcorrect_ik = vcorrect_ik
+      endif
+
+      if(allocated(vcorrect_scale).and.size(vcorrect_scale)>0) then
+      !  write(0,*) "vcorrect_scale",size(vcorrect_scale)
+!$acc update host(vcorrect_scale)
+        bead%vcorrect_scale = vcorrect_scale
+      endif
+
+      if(allocated(mcorrect_ik).and.size(mcorrect_ik)>0) then
+      !  write(0,*) "mcorrect_ik",size(mcorrect_ik)
+!$acc update host(mcorrect_ik)
+        bead%mcorrect_ik = mcorrect_ik
+      endif
+
+      if(allocated(mcorrect_scale).and.size(mcorrect_scale)>0) then
+      !  write(0,*) "mcorrect_scale",size(mcorrect_scale)
+!$acc update host(mcorrect_scale)
+        bead%mcorrect_scale = mcorrect_scale
+      endif
+
+      if(allocated(ccorrect_ik).and.size(ccorrect_ik)>0) then
+      !  write(0,*) "ccorrect_ik",size(ccorrect_ik)
+!$acc update host(ccorrect_ik)
+        bead%ccorrect_ik = ccorrect_ik
+      endif
+
+      if(allocated(ccorrect_scale).and.size(ccorrect_scale)>0) then
+      !   write(0,*) "ccorrect_scale",size(ccorrect_scale)
+!$acc update host(ccorrect_scale)
+        bead%ccorrect_scale = ccorrect_scale
+      endif
+
+      if(allocated(ucorrect_ik).and. size(ucorrect_ik)>0) then
+       !   write(0,*) "ucorrect_ik",size(ucorrect_ik)
+!$acc update host(ucorrect_ik)
+        bead%ucorrect_ik = ucorrect_ik
+      endif
+
+       if(allocated(ucorrect_scale).and.size(ucorrect_scale)>0) then
+       !  write(0,*) "ucorrect_scale",size(ucorrect_scale)
+!$acc update host(ucorrect_scale)
+        bead%ucorrect_scale = ucorrect_scale
+      endif
+
+      if(allocated(dpcorrect_ik).and.size(dpcorrect_ik)>0)  then
+      !  write(0,*) "dpcorrect_ik",size(dpcorrect_ik)
+!$acc update host(dpcorrect_ik)
+        bead%dpcorrect_ik = dpcorrect_ik
+      endif
+
+      if(allocated(dpcorrect_scale).and.size(dpcorrect_scale)>0) then
+       !   write(0,*) "dpcorrect_scale",size(dpcorrect_scale)
+!$acc update host(dpcorrect_scale)
+        bead%dpcorrect_scale = dpcorrect_scale
+      endif
+
+      if(allocated(dpucorrect_ik).and.size(dpucorrect_ik)>0) then
+      !  write(0,*) "dpucorrect_ik",size(dpucorrect_ik)
+!$acc update host(dpucorrect_ik)
+        bead%dpucorrect_ik = dpucorrect_ik
+      endif
+
+       if(allocated(dpucorrect_scale).and.size(dpucorrect_scale)>0) then
+       ! write(0,*) "dpucorrect_scale",size(dpucorrect_scale)
+!$acc update host(dpucorrect_scale)
+        bead%dpucorrect_scale = dpucorrect_scale
+      endif
+
+!$acc wait
       end
       
 
@@ -1389,11 +1619,16 @@ c
       use urey
       use vdw
       use virial
+      use polpot
+      use chgpot
+      use mplpot
+      use vdwpot
+      use utilgpu,only:prmem_request
       implicit none
       integer, intent(in) :: istep
       type(BEAD_TYPE), intent(inout) :: bead
       LOGICAL, intent(in) :: skip_parameters
-      integer modnl
+      integer modnl,n1,n2
 
 !$acc wait
       ibead_loaded_glob = bead%ibead_glob
@@ -1499,8 +1734,14 @@ c
         nvdwbloc = bead%nvdwbloc
         vdwglob = bead%vdwglob
         vdwglobnl = bead%vdwglobnl
+        vdwlocnl = bead%vdwlocnl
         nvdwlocnl = bead%nvdwlocnl
-!$acc update device(vdwglob(:),vdwglobnl(:)) async
+        nvdwblocloop = bead%nvdwblocloop
+        nvdwlocnlb = bead%nvdwlocnlb
+        nvdwlocnlb_pair = bead%nvdwlocnlb_pair
+        nvdwlocnlb2_pair = bead%nvdwlocnlb2_pair
+        nshortvdwlocnlb2_pair = bead%nshortvdwlocnlb2_pair
+!$acc update device(vdwglob(:),vdwglobnl(:),vdwlocnl(:)) async
       endif
 c
 c     BOND
@@ -1630,6 +1871,13 @@ c
         chgglob = bead%chgglob
         chgglobnl = bead%chgglobnl
         nionlocnl = bead%nionlocnl
+        nionlocloop = bead%nionlocloop
+        nionlocnlloop=bead%nionlocnlloop
+        nionlocnlb = bead%nionlocnlb
+        nionlocnlb_pair = bead%nionlocnlb_pair
+        nionlocnlb2_pair = bead%nionlocnlb2_pair
+        nshortionlocnlb2_pair = bead%nshortionlocnlb2_pair
+      
 !$acc update device(chgrecglob(:),chgglob(:),chgglobnl(:)) async
       endif
 
@@ -1639,16 +1887,31 @@ c
       if (use_mpole) then
         !write(0,*) "push MULTIPOLE"
         npolerecloc = bead%npolerecloc
-        polerecglob = bead%polerecglob
+        if(nlocrec>0) then
+          polerecglob = bead%polerecglob(1:nlocrec)
+!$acc update device(polerecglob(:)) async
+        endif
         npoleloc = bead%npoleloc
         npolebloc = bead%npolebloc
-        poleglob = bead%poleglob
+        poleglob = bead%poleglob(1:nbloc)
         poleloc = bead%poleloc
         polelocnl = bead%polelocnl
-        poleglobnl = bead%poleglobnl
-        npolelocnl = bead%npolelocnl
+        if(nlocnl>0) then
+          poleglobnl = bead%poleglobnl(1:nlocnl)
 !$acc update device(poleglobnl(:)) async
-!$acc update device(polerecglob(:),poleglob(:),poleloc(:),polelocnl(:)) async
+        endif
+        npolelocnl = bead%npolelocnl
+        npolelocnlb = bead%npolelocnlb
+        npolelocnlb_pair = bead%npolelocnlb_pair
+        npolelocnlb2_pair = bead%npolelocnlb2_pair
+        nshortpolelocnlb2_pair = bead%nshortpolelocnlb2_pair
+        npolerecloc_old = bead%npolerecloc_old
+        npolelocloop = bead%npolelocloop
+        npolelocnlloop = bead%npolelocnlloop
+        npoleblocloop = bead%npoleblocloop
+        npolereclocloop = bead%npolereclocloop
+
+!$acc update device(poleglob(:),poleloc(:),polelocnl(:)) async
       endif
 c
 c     POLARIZATION
@@ -1667,165 +1930,374 @@ c
       !NEIGHBORLIST
 
       if (allocated(celle_loc)) then
-        bead%celle_loc = celle_loc
+        n1=size(bead%celle_loc)
+        call prmem_request(celle_loc,n1
+     &        ,async=.true.)
+        celle_loc(1:n1) = bead%celle_loc(1:n1)
 !$acc update device(celle_loc) async
       endif
 
       if (allocated(celle_ploc)) then
-        celle_ploc = bead%celle_ploc 
+        n1=size(bead%celle_ploc)
+        call prmem_request(celle_ploc,n1
+     &        ,async=.true.)
+        celle_ploc(1:n1) = bead%celle_ploc(1:n1)
 !$acc update device(celle_ploc) async
       endif
 
       if (allocated(celle_x)) then
-        celle_x = bead%celle_x 
+        n1=size(bead%celle_x)
+        call prmem_request(celle_x,n1
+     &        ,async=.true.)
+        celle_x(1:n1) = bead%celle_x(1:n1)
 !$acc update device(celle_x) async
       endif
 
       if (allocated(celle_y)) then
-        celle_y = bead%celle_y 
+        n1=size(bead%celle_y)
+        call prmem_request(celle_y,n1
+     &        ,async=.true.)
+        celle_y(1:n1) = bead%celle_y(1:n1)
 !$acc update device(celle_y) async
       endif
 
       if (allocated(celle_z)) then
-        celle_z = bead%celle_z 
+        n1=size(bead%celle_z)
+        call prmem_request(celle_z,n1
+     &        ,async=.true.)
+        celle_z(1:n1) = bead%celle_z(1:n1)
 !$acc update device(celle_z) async
       endif
 
       if (allocated(nvlst)) then
-        nvlst = bead%nvlst 
+        n1=size(bead%nvlst)
+        call prmem_request(nvlst,n1
+     &        ,async=.true.)
+        nvlst(1:n1) =  bead%nvlst(1:n1)
 !$acc update device(nvlst) async
       endif
 
       if(allocated(vlst)) then
-        vlst = bead%vlst 
+        n1=size(bead%vlst,1)
+        n2=size(bead%vlst,2)
+        call prmem_request(vlst,n1,n2
+     &        ,async=.true.)
+        vlst(1:n1,1:n2) = bead%vlst(1:n1,1:n2) 
 !$acc update device(vlst) async
       endif
 
       if(allocated(nelst)) then
-        nelst = bead%nelst 
+        n1=size(bead%nelst)
+        call prmem_request(nelst,n1
+     &        ,async=.true.)
+        bead%nelst(1:n1) = bead%nelst(1:n1)
 !$acc update device(nelst) async
       endif
 
-      if (allocated(elst)) then        
-        elst = bead%elst 
+      if (allocated(elst)) then  
+        n1=size(bead%elst,1)
+        n2=size(bead%elst,2)
+        call prmem_request(elst,n1,n2
+     &        ,async=.true.)
+        elst(1:n1,1:n2) = bead%elst(1:n1,1:n2) 
 !$acc update device(elst) async
       end if
 
-      if (allocated(nelstc)) then        
-        nelstc = bead%nelstc 
+      if (allocated(nelstc)) then   
+        n1=size(bead%nelstc)
+        call prmem_request(nelstc,n1
+     &        ,async=.true.)
+        nelstc(1:n1) = bead%nelstc(1:n1)
 !$acc update device(nelstc) async
       end if
 
-      if (allocated(shortelst)) then        
-        shortelst = bead%shortelst 
+      if (allocated(shortelst)) then 
+        n1=size(bead%shortelst,1)
+        n2=size(bead%shortelst,2)
+        call prmem_request(shortelst,n1,n2
+     &        ,async=.true.)
+        shortelst(1:n1,1:n2) = bead%shortelst(1:n1,1:n2) 
 !$acc update device(shortelst) async
       end if
 
-      if (allocated(nshortelst)) then        
-        nshortelst = bead%nshortelst 
+      if (allocated(nshortelst)) then      
+        n1=size(bead%nshortelst)
+        call prmem_request(nshortelst,n1
+     &        ,async=.true.)
+        nshortelst(1:n1) = bead%nshortelst(1:n1)
 !$acc update device(nshortelst) async
       end if
 
-      if (allocated(nshortelstc)) then        
-        nshortelstc = bead%nshortelstc 
+      if (allocated(nshortelstc)) then   
+        n1=size(bead%nshortelstc)
+        call prmem_request(nshortelstc,n1
+     &        ,async=.true.)
+        nshortelstc(1:n1) = bead%nshortelstc(1:n1)
 !$acc update device(nshortelstc) async
       end if
 
-      if (allocated(eblst)) then        
-        eblst = bead%eblst 
+      if (allocated(eblst)) then   
+        n1=size(bead%eblst)
+        call prmem_request(eblst,n1
+     &        ,async=.true.)
+        eblst(1:n1) = bead%eblst(1:n1)
 !$acc update device(eblst) async
       end if
 
-       if (allocated(ieblst)) then        
-        ieblst = bead%ieblst 
+      if (allocated(ieblst)) then  
+        n1=size(bead%ieblst)
+        call prmem_request(ieblst,n1
+     &        ,async=.true.)
+        ieblst(1:n1) = bead%ieblst(1:n1)
 !$acc update device(ieblst) async
       end if
 
-      if (allocated(shorteblst)) then        
-        shorteblst = bead%shorteblst 
+      if (allocated(shorteblst)) then 
+        n1=size(bead%shorteblst)
+        call prmem_request(shorteblst,n1
+     &        ,async=.true.)
+        shorteblst(1:n1) = bead%shorteblst(1:n1)
 !$acc update device(shorteblst) async
       end if
 
-      if (allocated(ishorteblst)) then        
-        ishorteblst = bead%ishorteblst 
+      if (allocated(ishorteblst)) then   
+        n1=size(bead%ishorteblst)
+        call prmem_request(ishorteblst,n1
+     &        ,async=.true.)
+        ishorteblst(1:n1) = bead%ishorteblst(1:n1)
 !$acc update device(ishorteblst) async
       end if
       
 
-      if (allocated(nshortvlst)) then        
-        nshortvlst = bead%nshortvlst 
+      if (allocated(nshortvlst)) then 
+        n1=size(bead%nshortvlst)
+        call prmem_request(nshortvlst,n1
+     &        ,async=.true.)
+        nshortvlst(1:n1) = bead%nshortvlst(1:n1)
 !$acc update device(nshortvlst) async
       end if
 
-      if (allocated(shortvlst)) then        
-        shortvlst = bead%shortvlst 
+      if (allocated(shortvlst)) then   
+        n1=size(bead%shortvlst,1)
+        n2=size(bead%shortvlst,2)
+        call prmem_request(shortvlst,n1,n2
+     &        ,async=.true.)
+        shortvlst(1:n1,1:n2) = bead%shortvlst(1:n1,1:n2) 
 !$acc update device(shortvlst) async
       end if
 
-      if (allocated(vblst)) then        
-        vblst = bead%vblst 
+      if (allocated(vblst)) then   
+        n1=size(bead%vblst)
+        call prmem_request(vblst,n1
+     &        ,async=.true.)
+        vblst(1:n1) = bead%vblst(1:n1)
 !$acc update device(vblst) async
       end if
 
-      if (allocated(ivblst)) then        
-        ivblst = bead%ivblst 
+      if (allocated(ivblst)) then  
+        n1=size(bead%ivblst)
+        call prmem_request(ivblst,n1
+     &        ,async=.true.)
+        ivblst(1:n1) = bead%ivblst(1:n1)
 !$acc update device(ivblst) async
       end if
 
-      if (allocated(shortvblst)) then        
-        shortvblst = bead%shortvblst 
+      if (allocated(shortvblst)) then  
+        n1=size(bead%shortvblst)
+        call prmem_request(shortvblst,n1
+     &        ,async=.true.)
+        shortvblst(1:n1) = bead%shortvblst(1:n1)
 !$acc update device(shortvblst) async
       end if
 
-      if (allocated(ishortvblst)) then        
-        ishortvblst = bead%ishortvblst 
+      if (allocated(ishortvblst)) then
+        n1=size(bead%ishortvblst)
+        call prmem_request(ishortvblst,n1
+     &        ,async=.true.)
+        ishortvblst(1:n1) = bead%ishortvblst(1:n1)
 !$acc update device(ishortvblst) async
       end if
 
       if(allocated(celle_glob))  then
-        celle_glob = bead%celle_glob 
+        n1=size(bead%celle_glob)
+        call prmem_request(celle_glob,n1
+     &        ,async=.true.)
+        celle_glob(1:n1) = bead%celle_glob(1:n1)
 !$acc update device(celle_glob) async
       endif
 
       if(allocated(celle_pole))  then
-        celle_pole = bead%celle_pole 
+        n1=size(bead%celle_pole)
+        call prmem_request(celle_pole,n1
+     &        ,async=.true.)
+        celle_pole(1:n1) = bead%celle_pole(1:n1)
 !$acc update device(celle_pole) async
       endif
 
       if(allocated(celle_plocnl))  then
-        celle_plocnl = bead%celle_plocnl 
+        n1=size(bead%celle_plocnl)
+        call prmem_request(celle_plocnl,n1
+     &        ,async=.true.)
+        celle_plocnl(1:n1) = bead%celle_plocnl(1:n1)
 !$acc update device(celle_plocnl) async
       endif
       
       if(allocated(celle_key))  then
-        celle_key = bead%celle_key 
+        n1=size(bead%celle_key)
+        call prmem_request(celle_key,n1
+     &        ,async=.true.)
+        celle_key(1:n1) = bead%celle_key(1:n1)
 !$acc update device(celle_key) async
       endif
 
       if(allocated(celle_chg))  then
-        celle_chg = bead%celle_chg 
+        n1=size(bead%celle_chg)
+        call prmem_request(celle_chg,n1
+     &        ,async=.true.)
+        celle_chg(1:n1) = bead%celle_chg(1:n1)
 !$acc update device(celle_chg) async
       endif
 
       if(allocated(cellv_key))  then
-        cellv_key = bead%cellv_key 
+        n1=size(bead%cellv_key)
+        call prmem_request(cellv_key,n1
+     &        ,async=.true.)
+        cellv_key(1:n1) = bead%cellv_key(1:n1) 
 !$acc update device(cellv_key) async
       endif
 
       if(allocated(cellv_glob))  then
-        cellv_glob = bead%cellv_glob 
+        n1=size(bead%cellv_glob)
+        call prmem_request(cellv_glob,n1
+     &        ,async=.true.)
+        cellv_glob(1:n1) = bead%cellv_glob(1:n1) 
 !$acc update device(cellv_glob) async
       endif
 
       if(allocated(cellv_loc))  then
-        cellv_loc = bead%cellv_loc 
+        n1=size(bead%cellv_loc)
+        call prmem_request(cellv_loc,n1
+     &        ,async=.true.)
+        cellv_loc(1:n1) = bead%cellv_loc(1:n1) 
 !$acc update device(cellv_loc) async
       endif
 
        if(allocated(cellv_jvdw))  then
-        cellv_jvdw = bead%cellv_jvdw 
+        n1=size(bead%cellv_jvdw)
+        call prmem_request(cellv_jvdw,n1
+     &        ,async=.true.)
+        cellv_jvdw(1:n1) = bead%cellv_jvdw(1:n1)  
 !$acc update device(cellv_jvdw) async
       endif
+
+      !SCALING FACTORS
+      n_vscale=bead%n_vscale
+      n_mscale=bead%n_mscale
+      n_cscale=bead%n_cscale
+      n_uscale=bead%n_uscale
+      n_dpscale=bead%n_dpscale
+      n_dpuscale=bead%n_dpuscale
+
+      if(allocated(vcorrect_ik).and.size(vcorrect_ik)>0) then
+        n1=size(bead%vcorrect_ik,1)
+        n2=size(bead%vcorrect_ik,2)
+        call prmem_request(vcorrect_ik,n1,n2
+     &        ,async=.true.)
+        vcorrect_ik(1:n1,1:n2) = bead%vcorrect_ik(1:n1,1:n2) 
+!$acc update device(vcorrect_ik) async
+      endif
+
+      if(allocated(vcorrect_scale).and.size(vcorrect_scale)>0) then
+        n1=size(bead%vcorrect_scale)
+        call prmem_request(vcorrect_scale,n1
+     &        ,async=.true.)
+        vcorrect_scale(1:n1) = bead%vcorrect_scale(1:n1)  
+!$acc update device(vcorrect_scale) async
+      endif
+
+      if(allocated(mcorrect_ik).and.size(mcorrect_ik)>0) then
+        n1=size(bead%mcorrect_ik,1)
+        n2=size(bead%mcorrect_ik,2)
+        call prmem_request(mcorrect_ik,n1,n2
+     &        ,async=.true.)
+        mcorrect_ik(1:n1,1:n2) = bead%mcorrect_ik(1:n1,1:n2) 
+!$acc update device(mcorrect_ik) async
+      endif
+
+      if(allocated(mcorrect_scale).and.size(mcorrect_scale)>0) then
+        n1=size(bead%mcorrect_scale)
+        call prmem_request(mcorrect_scale,n1
+     &        ,async=.true.)
+        mcorrect_scale(1:n1) = bead%mcorrect_scale(1:n1)  
+!$acc update device(mcorrect_scale) async
+      endif
+
+      if(allocated(ccorrect_ik).and.size(ccorrect_ik)>0) then
+        n1=size(bead%ccorrect_ik,1)
+        n2=size(bead%ccorrect_ik,2)
+        call prmem_request(ccorrect_ik,n1,n2
+     &        ,async=.true.)
+        ccorrect_ik(1:n1,1:n2) = bead%ccorrect_ik(1:n1,1:n2) 
+!$acc update device(ccorrect_ik) async
+      endif
+
+      if(allocated(ccorrect_scale).and.size(ccorrect_scale)>0) then
+        n1=size(bead%ccorrect_scale)
+        call prmem_request(ccorrect_scale,n1
+     &        ,async=.true.)
+        ccorrect_scale(1:n1) = bead%ccorrect_scale(1:n1)
+!$acc update device(ccorrect_scale) async
+      endif
+
+      if(allocated(ucorrect_ik).and.size(ucorrect_ik)>0) then
+        n1=size(bead%ucorrect_ik)
+        call prmem_request(ucorrect_ik,n1
+     &        ,async=.true.)
+        ucorrect_ik(1:n1) = bead%ucorrect_ik(1:n1)
+!$acc update device(ucorrect_ik) async
+      endif
+
+      if(allocated(ucorrect_scale).and.size(ucorrect_scale)>0) then
+        n1=size(bead%ucorrect_scale)
+        call prmem_request(ucorrect_scale,n1
+     &        ,async=.true.)
+        ucorrect_scale(1:n1) = bead%ucorrect_scale(1:n1)
+!$acc update device(ucorrect_scale) async
+      endif
+
+      if(allocated(dpcorrect_ik).and.size(dpcorrect_ik)>0) then
+        n1=size(bead%dpcorrect_ik)
+        call prmem_request(dpcorrect_ik,n1
+     &        ,async=.true.)
+        dpcorrect_ik(1:n1) = bead%dpcorrect_ik(1:n1)
+!$acc update device(dpcorrect_ik) async
+      endif
+
+      if(allocated(dpcorrect_scale).and.size(dpcorrect_scale)>0) then
+        n1=size(bead%dpcorrect_scale)
+        call prmem_request(dpcorrect_scale,n1
+     &        ,async=.true.)
+        dpcorrect_scale(1:n1) = bead%dpcorrect_scale(1:n1)
+!$acc update device(dpcorrect_scale) async
+      endif
+
+      if(allocated(dpucorrect_ik).and.size(dpucorrect_ik)>0) then
+        n1=size(bead%dpucorrect_ik)
+        call prmem_request(dpucorrect_ik,n1
+     &        ,async=.true.)
+        dpucorrect_ik(1:n1) = bead%dpucorrect_ik(1:n1)
+!$acc update device(dpucorrect_ik) async
+      endif
+
+      if(allocated(dpucorrect_scale).and.size(dpucorrect_scale)>0) then
+        n1=size(bead%dpucorrect_scale)
+        call prmem_request(dpucorrect_scale,n1
+     &        ,async=.true.)
+        dpucorrect_scale(1:n1) = bead%dpucorrect_scale(1:n1)
+!$acc update device(dpucorrect_scale) async
+      endif
+
+
 c
 c     TIME
 c 

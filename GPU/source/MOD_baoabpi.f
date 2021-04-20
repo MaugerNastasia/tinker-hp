@@ -25,6 +25,8 @@ c
       implicit none
 
       real(r_p),allocatable, private, save::derivs(:,:)
+      real(t_p), allocatable, private, save::veltmp(:,:),postmp(:,:)
+      real(t_p), allocatable, private, save:: noise(:,:)
 
       contains
 
@@ -145,6 +147,7 @@ c
       use iounit
       use inform
       use molcul
+      use utilgpu, only: prmem_request
       implicit none
       real(r_p), intent(in) :: dt
       integer, intent(in) :: istep
@@ -152,8 +155,18 @@ c
       ! pos_full, vel_full must be filled only for ranktot 0
       integer i,j,k,iproc, ibead,l
       integer :: modstep
-      real(r_p) :: dt2, a1,a2, sqrtmass
+      real(r_p) :: dt2, a1,a2, sqrtmass,sumvel,sumpos
 
+      call prmem_request(veltmp,nbeads,3*n)
+      call prmem_request(postmp,nbeads,3*n)
+      !if(.not. allocated(postmp)) then
+      !  allocate(postmp(nbeads,3,n))
+      !endif
+      !if(.not. allocated(veltmp)) then
+      !  allocate(veltmp(nbeads,3,n))
+      !endif
+
+      print *, nbeads*3*n*8
       dt2=0.5_re_p*dt
 
       if(isobaric) extvolold = extvol
@@ -161,10 +174,28 @@ c
 c     propagate AOA
       if(ranktot .eq. 0) then
 
+!$acc data copy(vel_full,pos_full) present(eigmat,eigmattr,omkpi,mass) 
+!$acc&     present(veltmp,postmp)
+!$acc&     copyin(Ekcentroid)
+
 c       transform to normal modes
+!$acc parallel loop collapse(2) private(sumvel,sumpos)
         DO i=1,n ; DO j=1,3
-          vel_full(j,i,:)=matmul(eigmattr,vel_full(j,i,:))
-          pos_full(j,i,:)=matmul(eigmattr,pos_full(j,i,:))
+!$acc loop private(sumvel,sumpos)
+          do ibead=1,nbeads
+            sumvel =0.d0 ;sumpos=0.d0
+!$acc loop reduction(+:sumvel,sumpos) 
+            do k=1,nbeads
+              sumvel = sumvel + eigmattr(ibead,k)*vel_full(j,i,k)
+              sumpos = sumpos + eigmattr(ibead,k)*pos_full(j,i,k)
+            enddo
+            veltmp(ibead,j+3*(i-1)) = sumvel
+            postmp(ibead,j+3*(i-1)) = sumpos
+          enddo            
+          !veltmp(:)=matmul(eigmattr,vel_full(j,i,:))
+          vel_full(j,i,:) = veltmp(:,j+3*(i-1))
+          !postmp(:)=matmul(eigmattr,pos_full(j,i,:))
+          pos_full(j,i,:) = postmp(:,j+3*(i-1))
         ENDDO ; ENDDO
 
        if(isobaric) then
@@ -184,10 +215,14 @@ c         propagate volume velocity from previous step
 
 c         update Ekcentroid  and presvir     
         presvir=presvir-prescon*(2.d0*Ekcentroid/(3.d0*volbox))
+!$acc serial
         Ekcentroid=0
+!$acc end serial
+!$acc parallel loop collapse(2) reduction(+:Ekcentroid)
         DO i=1,n ; DO j=1,3          
           Ekcentroid=Ekcentroid+mass(i)*vel_full(j,i,1)**2
         ENDDO ; ENDDO
+!$acc update host(Ekcentroid)
         Ekcentroid=0.5d0*Ekcentroid/convert/nbeads        
         presvir=presvir+prescon*(2.d0*Ekcentroid/(3.d0*volbox))
 
@@ -201,10 +236,31 @@ c         propagate volume velocity
         endif        
 
 c         transform back to coordinates
-        DO i=1,n ; DO j=1,3 
-          vel_full(j,i,:)=matmul(eigmat,vel_full(j,i,:))
-          pos_full(j,i,:)=matmul(eigmat,pos_full(j,i,:))          
-        ENDDO ; ENDDO 
+!$acc parallel loop collapse(2) private(sumvel,sumpos)
+        DO i=1,n ; DO j=1,3
+!$acc loop private(sumvel,sumpos)
+          do ibead=1,nbeads
+            sumvel =0.d0 ;sumpos=0.d0
+!$acc loop reduction(+:sumvel,sumpos) 
+            do k=1,nbeads
+              sumvel = sumvel + eigmat(ibead,k)*vel_full(j,i,k)
+              sumpos = sumpos + eigmat(ibead,k)*pos_full(j,i,k)
+            enddo
+            veltmp(ibead,j+3*(i-1)) = sumvel
+            postmp(ibead,j+3*(i-1)) = sumpos
+          enddo            
+          !veltmp(:)=matmul(eigmattr,vel_full(j,i,:))
+          vel_full(j,i,:) = veltmp(:,j+3*(i-1))
+          !postmp(:)=matmul(eigmattr,pos_full(j,i,:))
+          pos_full(j,i,:) = postmp(:,j+3*(i-1))
+        ENDDO ; ENDDO
+
+        !DO i=1,n ; DO j=1,3 
+        !  vel_full(j,i,:)=matmul(eigmat,vel_full(j,i,:))
+        !  pos_full(j,i,:)=matmul(eigmat,pos_full(j,i,:))          
+        !ENDDO ; ENDDO 
+
+!$acc end data
       endif
 
 
@@ -225,12 +281,14 @@ c         transform back to coordinates
       real(r_p) :: acentroid,scale
       integer :: i,j,k
 
+!$acc data present(eigpos,eigvel,omkpi) create(eigx0,eigv0) copyin(tau)
         if(isobaric) then
 c         propagate centroid isobaric (half step)
           acentroid = sinh(tau*vextvol)/vextvol
           scale=exp(tau*vextvol)            
           extvol = extvol*exp(3.d0*tau*vextvol)
 
+!$acc parallel loop collapse(2) copyin(scale,acentroid)
           DO i=1,n  ; DO j=1,3
             eigpos(j,i,1)=eigpos(j,i,1)*scale
      &        +acentroid*eigvel(j,i,1)
@@ -238,12 +296,14 @@ c         propagate centroid isobaric (half step)
           ENDDO ; ENDDO 
         else
 c         propagate centroid (half step)
+!$acc parallel loop collapse(2)
           DO i=1,n ; DO j=1,3
             eigpos(j,i,1)=eigpos(j,i,1) + tau*eigvel(j,i,1)
           ENDDO ; ENDDO
         endif
 
 c         propagate springs (half step)
+!$acc parallel loop collapse(3) private(eigx0,eigv0)
         DO k=2,nbeads
           DO i=1,n ; DO j=1,3           
             eigx0=eigpos(j,i,k)
@@ -255,6 +315,8 @@ c         propagate springs (half step)
           ENDDO ; ENDDO
         ENDDO
 
+!$acc end data
+
       end subroutine apply_a_pi
 
       subroutine apply_o_pi(eigpos,eigvel,tau)
@@ -265,22 +327,44 @@ c         propagate springs (half step)
         use bath
         use langevin
         use random_mod
+        use utilgpu,only: prmem_request
         implicit none
         real(8),intent(inout),allocatable :: eigpos(:,:,:),eigvel(:,:,:)
         real(r_p), intent(in) :: tau
         real(r_p) :: acentroid,a1p,a2p,gammak,a1,a2
-        integer :: i,j,k
+        integer :: i,j,k,ii
 
+        call prmem_request(noise,3*n,nbeads,async=.true.)
+!$acc wait
+#ifdef _OPENACC
+        call normalgpu(noise(1,1),3*n*nbeads)
+#endif
+        if (host_rand_platform) then
+          do i = 1, nbeads
+            do j = 1, 3*n
+              noise(j,i) = normal()
+            end do
+          end do
+!$acc update device(noise) async
+        end if
+
+!$acc wait
+!$acc data present(eigvel,omkpi,noise,mass) 
+!$acc&     copyin(gamma,tau,nbeads,kelvin,boltzmann)
+!$acc&     create(gammak,a1,a2)
 c         propagate langevin (full step, TRPMD)
+!$acc parallel loop private(gammak,a1,a2)
         DO k=1,nbeads
           gammak=max(gamma,omkpi(k))
           a1 = exp(-gammak*tau)
           a2 = sqrt((1.-a1**2)*nbeads*boltzmann*kelvin)
+!$acc loop collapse(2)
           DO i=1,n ; DO j=1,3 
             eigvel(j,i,k)=eigvel(j,i,k)*a1 
-     &              + a2*normal()/sqrt(mass(i))
+     &              + a2*noise(3*(i-1)+j,k)/sqrt(mass(i))
           ENDDO; ENDDO
         ENDDO
+!$acc end data
 
         if(isobaric) then
 c         langevin piston (full step)

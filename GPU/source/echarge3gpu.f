@@ -236,6 +236,9 @@ c
 
       real(t_p) xi,yi,zi
       real(t_p) xr,yr,zr
+#ifdef TINKER_DEBUG
+      integer ninte(n)
+#endif
 
       real(t_p),parameter:: scale_f=1.0
 

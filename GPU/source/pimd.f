@@ -463,23 +463,24 @@ c
         integer, intent(in) :: istep
         real(r_p), intent(in) :: dt
         integer :: ibead,i,j,iglob
-        real(8) time0,time1,time00,time01
-        real(8) timebeads,timepush,timereass,timeinit
-        real(8) timededvcalc,timebaoab2,timeaoa,time_com
+        real(8),save::time0=0d0,time1=0d0,time00=0d0
+        real(8),save::time01=0d0, timebegin=0d0,timecontract=0d0
+        real(8),save::timefull=0d0,timepush=0d0,timereass=0d0
+        real(8),save::timeinit=0d0,timegrad=0d0
+        real(8),save::timeobs=0d0,timeaoa=0d0,timecom=0d0,timesavenl=0d0
         TYPE(POLYMER_COMM_TYPE) :: polymer,polymer_ctr
         logical :: skip_parameters_copy
 
         skip_parameters_copy=(nbeadsloc+nbeadsloc_ctr).eq.1
 
-        timepush=0d0
-        timereass=0d0
-        timeinit=0d0
-        time_com=0.d0
-
-        time1 = mpi_wtime()
+        timebegin = mpi_wtime()
 c       GATHER polymer info at ranktot 0 (arrays are allocated inside the subroutine)
         !write(0,*) "ranktot",ranktot,"entering gather_polymer"
         call gather_polymer(polymer,beadsloc,.TRUE.,.TRUE.,.TRUE.)
+
+        time1=mpi_wtime
+        timecom = timecom + time1 - timebegin
+
 
         ! CONTRACTIONS
         if(contract) then
@@ -511,7 +512,12 @@ c       GATHER polymer info at ranktot 0 (arrays are allocated inside the subrou
           endif
 
           call deallocate_polymer(polymer_ctr)
+
+
         endif
+
+        time0 = mpi_wtime()
+        timecontract=timecontract+time0-time1
 
         !write(0,*) "ranktot",ranktot,"entering compute_observables"
 c       gather and compute OBSERVABLES
@@ -524,15 +530,16 @@ c       gather and compute OBSERVABLES
 c       aggregate statistical AVERAGES and PRINT system info 
         if(ranktot.eq.0) call mdstatpi(istep,dt)
     
-        time0 = mpi_wtime() 
-        time_com=time_com+time0-time1
+        time1 = mpi_wtime() 
+        timeobs=timeobs+time1-time0
 
         
 c        PROPAGATE AOA
         !write(0,*) "ranktot",ranktot,"entering aoapi"
         call apply_aoa_pi(istep,dt,polymer%pos,polymer%vel)
-        time1 = mpi_wtime()
-        timeaoa=time1-time0
+        
+        time0 = mpi_wtime()
+        timeaoa=timeaoa+time0-time1
 
 c       BROADCAST polymer info from ranktot 0 to everyone else
         call broadcast_polymer(polymer,beadsloc,.TRUE.,.TRUE.,.FALSE.)
@@ -540,8 +547,8 @@ c       BROADCAST polymer info from ranktot 0 to everyone else
         if(allocated(polymer%pos)) deallocate(polymer%pos)
         if(allocated(polymer%vel)) deallocate(polymer%vel)
         
-        time0=mpi_wtime()
-        time_com=time_com+time0-time1
+        time1=mpi_wtime()
+        timecom=timecom+time1-time0
         
 
         !write(0,*) "ranktot",ranktot,"entering baoabpi2"
@@ -562,14 +569,15 @@ c       BROADCAST polymer info from ranktot 0 to everyone else
           ! and reconstruction of neighborlist
           call prepare_loaded_bead(istep)
                  
+          time00=mpi_wtime()
+          timereass=timereass+time00-time01
 
           ! APPLY B (compute gradient)
-          !write(0,*) "before apply_b_pi"
-          time00=mpi_wtime()
+          !write(0,*) "before apply_b_pi"          
           call apply_b_pi(istep,dt)
+
           time01=mpi_wtime()
-          timebaoab2=timebaoab2+time01-time00
-          time00=mpi_wtime()
+          timegrad=timegrad+time01-time00
 
           !write(0,*) "before kinetic"
           ! COMPUTE kinetic energy of loaded bead
@@ -579,13 +587,14 @@ c       BROADCAST polymer info from ranktot 0 to everyone else
 
           !write(0,*) "ranktot",ranktot,"entering dedvcalc"
           !write(0,*) "before dedvcalc"
-          call dedvcalc()
-          time01=mpi_wtime()
-          timededvcalc=timededvcalc+time01-time00  
+          call dedvcalc()          
 
           !write(0,*) "before mdsavebeads"
           ! SAVE bead trajectory
-          call mdsavebeads (istep,dt)    
+          call mdsavebeads (istep,dt)  
+
+          time00=mpi_wtime()
+          timeobs=timeobs+time00-time01   
 
 !$acc end data              
 
@@ -596,31 +605,64 @@ c       BROADCAST polymer info from ranktot 0 to everyone else
           time01=mpi_wtime()
           timeinit=timeinit+time01-time00
 
-          time00=mpi_wtime()
+
           ! STORE new neighborlist if necessary
           !write(0,*) "before savebeadnl"
           if(.not.skip_parameters_copy) then
             call savebeadnl(istep,beadsloc(ibead))
           endif
 
+          time00=mpi_wtime()
+          timesavenl = timesavenl+time00-time01
 
         end do
-
-
+        
         call deallocate_polymer(polymer)
+        timefull=timefull+mpi_wtime()-timebegin
+        
 
         ! STEP DONE
 
         !write(0,*) "ranktot",ranktot,"step done"
-c        if(ranktot.eq.0) then
-c            write(*,*) 'Time pushbeads etc ', timebeads
-c            write(*,*) 'Time pushbead ', timepush
-c            write(*,*) 'Time reassigpi etc ', timereass
-c            write(*,*) 'Time initbead etc ', timeinit
-c            write(*,*) 'Time baoab 2 (gradient)  ', timebaoab2
-c            write(*,*) 'Time dedv ', timededvcalc
-c            write(*,*) 'Time aoa ', timeaoa
-c      endif
+        if (mod(istep,iprint).eq.0) then
+          if(verbose .and. ranktot.eq.0) then
+              write(*,*)
+              write(*,*) "### PIMD TIMERS ###"
+              write(*,*) 'Time pushbead ', timepush/iprint
+     &         , '(',100*timepush/timefull,'%)'
+              write(*,*) 'Time initbead ', timeinit/iprint
+     &         , '(',100*timeinit/timefull,'%)'
+              write(*,*) 'Time savebeadnl ', timesavenl/iprint
+     &         , '(',100*timesavenl/timefull,'%)'
+              write(*,*) 'Time prepare ', timereass/iprint          
+     &         , '(',100*timereass/timefull,'%)'
+              write(*,*) 'Time gradient ', timegrad/iprint
+     &         , '(',100*timegrad/timefull,'%)'
+              write(*,*) 'Time observables ', timeobs/iprint
+     &         , '(',100*timeobs/timefull,'%)'
+              write(*,*) 'Time gather/broadcast polymer ',timecom/iprint
+     &         , '(',100*timecom/timefull,'%)'
+              write(*,*) 'Time aoa ', timeaoa/iprint
+     &         , '(',100*timeaoa/timefull,'%)'
+              if(contract) then
+                write(*,*) 'Time contract ', timecontract/iprint
+     &         , '(',100*timecontract/timefull,'%)'
+              endif
+              write(*,*) 'Time step ', timefull/iprint
+              write(*,*) "#############"
+              write(*,*)
+          endif
+          timefull=0.d0
+          timepush=0d0
+          timereass=0d0
+          timeinit=0d0
+          timecom=0.d0
+          timeaoa=0.d0
+          timegrad=0.d0
+          timeobs=0.d0
+          timecontract=0.d0
+          timesavenl=0.d0
+        endif
 
 
 
