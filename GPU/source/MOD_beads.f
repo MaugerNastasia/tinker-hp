@@ -173,7 +173,7 @@ c
         integer :: nloc,nbloc,nlocrec
         integer :: nblocrec,nlocnl
         integer :: nblocrecdir
-        integer, allocatable :: glob(:),loc(:),repart(:)        
+        integer, allocatable :: glob(:),locpi(:),repart(:)        
         integer, allocatable :: repartrec(:), domlen(:)
         integer, allocatable :: domlenrec(:),domlenpole(:)
         integer, allocatable :: domlenpolerec(:),globrec(:)
@@ -499,15 +499,19 @@ c
 
       call deallocate_bead(bead)
 
+!$acc enter data create(bead)
+!$acc data present(bead)
+
       allocate(bead%x(n))
       allocate(bead%y(n))
       allocate(bead%z(n))
       allocate(bead%v(3,n))
       allocate(bead%a(3,n))
+!$acc enter data create(bead%x,bead%y,bead%z,bead%v,bead%a) async
     
     
       allocate(bead%glob(n))
-      allocate(bead%loc(n))
+      allocate(bead%locpi(n))
       allocate(bead%repart(n))
       allocate(bead%repartrec(n))
       allocate(bead%domlen(nproc))
@@ -528,9 +532,34 @@ c
       allocate(bead%bufbeg1(nproc))
       allocate(bead%bufbeg2(nproc))
       allocate(bead%molculeglob(nmol))
+!$acc enter data create(bead%glob)
+!$acc&           create(bead%locpi)
+!$acc&           create(bead%repart)
+!$acc&           create(bead%repartrec)
+!$acc&           create(bead%domlen)
+!$acc&           create(bead%domlenrec)
+!$acc&           create(bead%domlenpole)
+!$acc&           create(bead%domlenpolerec)
+!$acc&           create(bead%globrec)
+!$acc&           create(bead%locrec)
+!$acc&           create(bead%globrec1)
+!$acc&           create(bead%locrec1)
+!$acc&           create(bead%bufbegrec)
+!$acc&           create(bead%bufbegpole)
+!$acc&           create(bead%bufbeg)
+!$acc&           create(bead%buflen1)
+!$acc&           create(bead%buflen2)
+!$acc&           create(bead%buf1)
+!$acc&           create(bead%buf2)
+!$acc&           create(bead%bufbeg1)
+!$acc&           create(bead%bufbeg2)
+!$acc&           create(bead%molculeglob) async
 
-      if(allocated(ineignl)) 
-     &   allocate(bead%ineignl(n))
+
+      if(allocated(ineignl)) then
+        allocate(bead%ineignl(n))
+!$acc enter data create(bead%ineignl) async
+      endif
          
 
 
@@ -538,71 +567,94 @@ c
         allocate(bead%vdwglob(n))
         allocate(bead%vdwglobnl(n))
         allocate(bead%vdwlocnl(n))
+!$acc enter data create(bead%vdwglob) 
+!$acc&           create(bead%vdwglobnl)
+!$acc&           create(bead%vdwlocnl) async
       end if
 
       if (use_bond) then
         allocate(bead%bndglob(8*n))
+!$acc enter data create(bead%bndglob)  async
       end if
 
       if (use_strbnd) then
         allocate(bead%strbndglob(nangle))
+!$acc enter data create(bead%strbndglob)  async
       end if
       
       if (use_urey) then
         allocate(bead%ureyglob(nangle))
+!$acc enter data create(bead%ureyglob)  async
       end if
 
       if (use_angang) then
         allocate(bead%angangglob(ntors))
+!$acc enter data create(bead%angangglob)  async
       end if
 
       if (use_opbend) then
         allocate(bead%opbendglob(nangle))
+!$acc enter data create(bead%opbendglob)  async
       end if
 
       if (use_opdist) then
         allocate(bead%opdistglob(n))
+!$acc enter data create(bead%opdistglob)  async
       end if
 
       if (use_improp) then
         allocate(bead%impropglob(6*n))
+!$acc enter data create(bead%impropglob)  async
       end if
 
       if (use_imptor) then
         allocate(bead%imptorglob(6*n))
+!$acc enter data create(bead%imptorglob)  async
       end if
 
       if (use_tors) then
         allocate(bead%torsglob(6*n))
+!$acc enter data create(bead%torsglob)  async
       end if
 
       if (use_pitors) then 
         allocate(bead%pitorsglob(ntors))
+!$acc enter data create(bead%pitorsglob)  async
       end if
 
       if (use_strtor) then
         allocate(bead%strtorglob(ntors))
+!$acc enter data create(bead%strtorglob)  async
       end if
 
       if (use_tortor) then
         allocate(bead%tortorglob(nbitor))
+!$acc enter data create(bead%tortorglob)  async
       end if
 
       if (use_angle) then
         allocate(bead%angleglob(4*n))
+!$acc enter data create(bead%angleglob)  async
       end if
 
       if (use_charge) then
         allocate(bead%chgrecglob(n))
         allocate(bead%chgglob(n))
         allocate(bead%chgglobnl(n))
+!$acc enter data create(bead%chgrecglob) 
+!$acc&           create(bead%chgglob)
+!$acc&           create(bead%chgglobnl) async
       end if
 
       if (use_polar) then
-        allocate(bead%udalt(maxualt,3,n))
-        allocate(bead%upalt(maxualt,3,n))
+        allocate(bead%udalt(3,n,maxualt))
+        allocate(bead%upalt(3,n,maxualt))
         allocate(bead%uind(3,n))
         allocate(bead%uinp(3,n))
+!$acc enter data create(bead%udalt(:,:,:)) 
+!$acc&           create(bead%upalt(:,:,:))
+!$acc&           create(bead%uind)
+!$acc&           create(bead%uinp) async
       end if
 
       if (use_mpole) then
@@ -612,7 +664,18 @@ c
         allocate(bead%poleglobnl(n))
         allocate(bead%polelocnl(n))
         allocate(bead%polerecloc(n))
+!$acc enter data create(bead%polerecglob) 
+!$acc&           create(bead%poleglob)
+!$acc&           create(bead%poleloc)
+!$acc&           create(bead%poleglobnl)
+!$acc&           create(bead%polelocnl)
+!$acc&           create(bead%polerecloc) async
       end if
+
+!$acc wait
+
+!$acc end  data 
+
       
       end subroutine
 
@@ -626,7 +689,7 @@ c
         if (allocated(bead%v)) deallocate(bead%v)
         if (allocated(bead%a)) deallocate(bead%a)   
         if (allocated(bead%glob)) deallocate(bead%glob)
-        if (allocated(bead%loc)) deallocate(bead%loc)
+        if (allocated(bead%locpi)) deallocate(bead%locpi)
         if (allocated(bead%repart)) deallocate(bead%repart)
         if (allocated(bead%repartrec)) deallocate(bead%repartrec)
         if (allocated(bead%domlen)) deallocate(bead%domlen)
@@ -756,21 +819,30 @@ c
       integer, intent(in) :: istep
       type(BEAD_TYPE), intent(inout) :: bead 
       logical,intent(in) :: skip_parameters
-      integer ibead,i,modnl
+      integer ibead,i,j,k,modnl
 
-      !write(0,*) "initbead pos"
+
 !$acc wait
+!$acc data present(bead)
 c
 c     positions, speed, mass
 c
-!$acc update host(x(:),y(:),z(:),v(:,:),a(:,:))
+!!!$acc update host(x(:),y(:),z(:),v(:,:),a(:,:))
 
-      bead%x = x
-      bead%y = y
-      bead%z = z
-      bead%v = v
-      bead%a = a
+!$acc parallel loop 
+      do i=1,n
+        bead%x(i) = x(i)
+        bead%y(i) = y(i)
+        bead%z(i) = z(i)
+!$acc loop
+        do j=1,3
+          bead%v(j,i) = v(j,i)
+          bead%a(j,i) = a(j,i)
+        enddo
+      enddo
 
+      !print *,"initbead pos update host"
+!$acc update host(bead%x(:),bead%y(:),bead%z(:),bead%v(:,:),bead%a(:,:))
       !write(0,*) "initbead ener"
 
 !$acc update host(eksumpi_loc,ekinpi_loc)
@@ -790,11 +862,15 @@ c
       bead%ekin=ekinpi_loc
       bead%dedv = dedv
 
-!$acc update host(glob(:))
-      !write(0,*) "initbead glob",allocated(glob),allocated(bead%glob)
-
+      !write(0,*) "initbead glob"
       bead%nloc = nloc
+!!!$acc update host(glob(:))
+!$acc parallel
       bead%glob = glob
+!$acc end parallel
+!$acc update host(bead%glob(:))
+
+!$acc end data
 c
 c     STAT
 c
@@ -815,6 +891,7 @@ c
 
       if(skip_parameters) return
 
+!$acc data present(bead)
       modnl = mod(istep,ineigup)
 c
 c     parallelism
@@ -827,15 +904,16 @@ c
       bead%nlocnl = nlocnl
       bead%nblocrecdir = nblocrecdir
 
-!$acc update host(loc(:),ineignl(:)) async
-!$acc update host(repart(:),repartrec(:)) async
-!$acc update host(domlenrec(:),domlenpole(:),domlenpolerec(:)) async
-!$acc update host(globrec(:),locrec(:),globrec1(:),locrec1(:)) async
-!$acc update host(bufbegpole(:)) async
-!$acc update host(buflen2(:),buf1(:),buf2(:)) async
-!$acc update host(bufbeg1(:),bufbeg2(:)) async
-!$acc wait
-      bead%loc = loc
+c !$acc update host(loc(:),ineignl(:)) async
+c !$acc update host(repart(:),repartrec(:)) async
+c !$acc update host(domlenrec(:),domlenpole(:),domlenpolerec(:)) async
+c !$acc update host(globrec(:),locrec(:),globrec1(:),locrec1(:)) async
+c !$acc update host(bufbegpole(:)) async
+c !$acc update host(buflen2(:),buf1(:),buf2(:)) async
+c !$acc update host(bufbeg1(:),bufbeg2(:)) async
+c !$acc wait
+!$acc parallel
+      bead%locpi = loc
       bead%ineignl = ineignl
       !bead%locnl = locnl
       bead%repart = repart
@@ -857,140 +935,175 @@ c
       bead%buf2(1:nblocrecdir) = buf2
       bead%bufbeg1 =  bufbeg1
       bead%bufbeg2 = bufbeg2
-
+!$acc end parallel
 c
 c     VDW 
 c
       !write(0,*) "initbead vdw"
 
       if (use_vdw) then
-!$acc update host(vdwglob(:),vdwglobnl(:),vdwlocnl(:))
-        bead%nvdwbloc = nvdwbloc
+!!!$acc update host(vdwglob(:),vdwglobnl(:),vdwlocnl(:))
+!$acc parallel
         bead%vdwglob = vdwglob
         bead%vdwglobnl = vdwglobnl
         bead%vdwlocnl = vdwlocnl
+!$acc end parallel
+        bead%nvdwbloc = nvdwbloc
         bead%nvdwlocnl = nvdwlocnl
         bead%nvdwlocnlb = nvdwlocnlb
         bead%nvdwlocnlb_pair = nvdwlocnlb_pair
         bead%nvdwlocnlb2_pair = nvdwlocnlb2_pair
         bead%nshortvdwlocnlb2_pair = nshortvdwlocnlb2_pair
         bead%nvdwblocloop = nvdwblocloop
+
       end if
 c
 c     BONDS
 c
+      !write(0,*) "initbead bonds"
       if (use_bond) then
-!$acc update host(bndglob(:))
+!!!$acc update host(bndglob(:))
+!$acc parallel
         bead%bndglob = bndglob
+!$acc end parallel
         bead%nbondloc = nbondloc
       end if
 c
 c     STRETCH-BEND
 c
+      !write(0,*) "initbead strbnd"
       if (use_strbnd) then
-!$acc update host(strbndglob(:))
+!!!$acc update host(strbndglob(:))
+!$acc parallel
         bead%strbndglob = strbndglob
+!$acc end parallel
         bead%nstrbndloc = nstrbndloc
       end if
 c
 c     UREY-BRADLEY
 c
       if (use_urey) then
-!$acc update host(ureyglob(:))
+!!!$acc update host(ureyglob(:))
+!$acc parallel
         bead%ureyglob = ureyglob
+!$acc end parallel
         bead%nureyloc = nureyloc
       end if
 c
 c     ANGlE-ANGLE
 c
       if (use_angang) then
-!$acc update host(angangglob(:))
+!!!$acc update host(angangglob(:))
+!$acc parallel
         bead%angangglob = angangglob
+!$acc end parallel
         bead%nangangloc = nangangloc
       end if
 c
 c     OP-BENDING
 c
       if (use_opbend) then
-!$acc update host(opbendglob(:))
+!!!$acc update host(opbendglob(:))
+!$acc parallel
         bead%opbendglob = opbendglob
+!$acc end parallel
         bead%nopbendloc = nopbendloc
       end if
 c
 c     OP-DIST
 c
       if (use_opdist) then
-!$acc update host(opdistglob(:))
+!!!$acc update host(opdistglob(:))
+!$acc parallel
         bead%opdistglob = opdistglob
+!$acc end parallel
         bead%nopdistloc = nopdistloc
       end if
 c
 c     IMPROP
 c
       if (use_improp) then
-!$acc update host(impropglob(:))
+!!!$acc update host(impropglob(:))
+!$acc parallel
         bead%impropglob = impropglob
+!$acc end parallel
         bead%niproploc = niproploc
       end if
 c
 c     IMPTOR
 c
       if (use_imptor) then
-!$acc update host(imptorglob(:))
+!!!$acc update host(imptorglob(:))
+!$acc parallel
         bead%imptorglob = imptorglob
+!$acc end parallel
         bead%nitorsloc = nitorsloc
       end if
 c
 c     TORSION
 c
       if (use_tors) then
-!$acc update host(torsglob(:))
+!!!$acc update host(torsglob(:))
+!$acc parallel
         bead%torsglob = torsglob
+!$acc end parallel
         bead%ntorsloc = ntorsloc
       end if
 c
 c     PITORSION
 c
       if (use_pitors) then
-!$acc update host(pitorsglob(:))
+!!!$acc update host(pitorsglob(:))
+!$acc parallel
         bead%pitorsglob = pitorsglob
+!$acc end parallel
         bead%npitorsloc = npitorsloc
       end if
 c
 c     STRETCH-TORSION
 c
       if (use_strtor) then
-!$acc update host(strtorglob(:))
+!!!$acc update host(strtorglob(:))
+!$acc parallel
         bead%strtorglob = strtorglob
+!$acc end parallel
         bead%nstrtorloc = nstrtorloc
       end if
 c
 c     TORSION-TORSION
 c
       if (use_tortor) then
-!$acc update host(tortorglob(:))
+!!!$acc update host(tortorglob(:))
+!$acc parallel
         bead%tortorglob = tortorglob
+!$acc end parallel
         bead%ntortorloc = ntortorloc
       end if
 c
 c     ANGLE
 c
       if (use_angle) then
-!$acc update host(angleglob(:))
+!!!$acc update host(angleglob(:))
+!$acc parallel
         bead%angleglob = angleglob
+!$acc end parallel
         bead%nangleloc = nangleloc
       end if
 c
 c     CHARGE
 c
       !write(0,*) "initbead charge"
+
+      !write(0,*) "initbead charge"
       if (use_charge) then
-!$acc update host(chgrecglob(:),chgglob(:),chgglobnl(:))
+!!!$acc update host(chgrecglob(:),chgglob(:),chgglobnl(:))
+!$acc parallel
         bead%chgrecglob = chgrecglob
-        bead%nionrecloc = nionrecloc
         bead%chgglob = chgglob
-        bead%nionloc = nionloc
         bead%chgglobnl = chgglobnl
+!$acc end parallel
+        bead%nionrecloc = nionrecloc
+        bead%nionloc = nionloc
         bead%nionlocnl = nionlocnl
         bead%nionlocloop = nionlocloop
         bead%nionlocnlloop = nionlocnlloop
@@ -1006,25 +1119,27 @@ c      end if
 c
 c     MULTIPOLE
 c
-      !,*) "initbead mpole"
+      !write(0,*) "initbead mpole"
       if (use_mpole) then
-!$acc update host(polerecglob(:),poleglob(:),poleloc(:)) async
-!$acc update host(polelocnl(:),polerecloc(:)) async
-!$acc wait
+!!$acc update host(polerecglob(:),poleglob(:),poleloc(:)) async
+!!$acc update host(polelocnl(:),polerecloc(:),poleglobnl(:)) async
+!!$acc wait
+!$acc parallel copyin(nlocrec,nbloc,nlocnl)
         if(nlocrec>0) then
           bead%polerecglob(1:nlocrec) = polerecglob(:)
         endif
-        bead%npolerecloc = npolerecloc
         bead%poleglob(1:nbloc) = poleglob(:)
         bead%poleloc = poleloc
-        bead%polerecloc = polerecloc
-        bead%npoleloc = npoleloc
-        bead%npolebloc = npolebloc
         if(nlocnl>0) then
           bead%poleglobnl(1:nlocnl) = poleglobnl
         endif
-        bead%npolelocnl = npolelocnl
+        bead%polerecloc = polerecloc
         bead%polelocnl = polelocnl
+!$acc end parallel
+        bead%npolerecloc = npolerecloc
+        bead%npoleloc = npoleloc
+        bead%npolebloc = npolebloc        
+        bead%npolelocnl = npolelocnl
         bead%npolelocnlb = npolelocnlb
         bead%npolelocnlb_pair = npolelocnlb_pair
         bead%npolelocnlb2_pair = npolelocnlb2_pair
@@ -1039,16 +1154,21 @@ c
 c
 c     POLARIZATION
 c
+
       if (use_polar) then
-!$acc update host(udalt(:,:,:),upalt(:,:,:)) async
-!$acc update host(uind(:,:),uinp(:,:)) async
-!$acc wait
+!!!$acc update host(udalt(:,:,:),upalt(:,:,:)) async
+!!!$acc update host(uind(:,:),uinp(:,:)) async
+!!!$acc wait
         bead%nualt = nualt
+!$acc parallel
         bead%udalt = udalt
         bead%upalt = upalt
         bead%uind = uind
         bead%uinp = uinp
+!$acc end parallel
       end if
+
+!$acc end data 
 
 c
 c     TIME
@@ -1652,17 +1772,25 @@ c
       endif
 !$acc update device(eksumpi_loc,ekinpi_loc,epotpi_loc) async
 
+!$acc data present(bead)
+!$acc update device(bead%x,bead%y,bead%z,bead%v,bead%a)
       !write(0,*) "push position"      
+!$acc parallel
       x = bead%x
       y = bead%y
       z = bead%z
       v = bead%v
       a= bead%a
-!$acc update device(x(:),y(:),z(:),v(:,:),a(:,:)) async
+!$acc end parallel
+!!!$acc update device(x(:),y(:),z(:),v(:,:),a(:,:)) async
 
       nloc = bead%nloc
+!$acc parallel
       glob = bead%glob
-!$acc update device(glob(:)) async
+!$acc end parallel
+!!!$acc update device(glob(:)) async
+
+!$acc end data
 c
 c     STAT
 c
@@ -1685,6 +1813,8 @@ c
       if (skip_parameters) return
 
       modnl = mod(istep,ineigup)
+!$acc data present(bead)
+
 c
 c     parallelism
 c
@@ -1695,7 +1825,8 @@ c
       nlocnl = bead%nlocnl
       nblocrecdir = bead%nblocrecdir
 
-      loc = bead%loc
+!$acc parallel
+      loc = bead%locpi
       ineignl = bead%ineignl
       ! locnl = bead%locnl
       repart = bead%repart
@@ -1717,31 +1848,34 @@ c
       buf2 = bead%buf2
       bufbeg1 = bead%bufbeg1
       bufbeg2 = bead%bufbeg2
+!$acc end parallel
 
-!$acc update device(loc(:),ineignl(:)) async
-!$acc update device(repart(:),repartrec(:)) async
-!$acc update device(domlenrec(:),domlenpole(:),domlenpolerec(:)) async
-!$acc update device(globrec(:),locrec(:),globrec1(:),locrec1(:)) async
-!$acc update device(bufbegpole(:)) async
-!$acc update device(buflen2(:),buf1(:),buf2(:)) async
-!$acc update device(bufbeg1(:),bufbeg2(:)) async
+c !$acc update device(loc(:),ineignl(:)) async
+c !$acc update device(repart(:),repartrec(:)) async
+c !$acc update device(domlenrec(:),domlenpole(:),domlenpolerec(:)) async
+c !$acc update device(globrec(:),locrec(:),globrec1(:),locrec1(:)) async
+c !$acc update device(bufbegpole(:)) async
+c !$acc update device(buflen2(:),buf1(:),buf2(:)) async
+c !$acc update device(bufbeg1(:),bufbeg2(:)) async
 
 c
 c     VDW
 c
       if (use_vdw) then
         ! write(0,*) "push VDW"
-        nvdwbloc = bead%nvdwbloc
+!$acc parallel
         vdwglob = bead%vdwglob
         vdwglobnl = bead%vdwglobnl
         vdwlocnl = bead%vdwlocnl
+!$acc end parallel
+        nvdwbloc = bead%nvdwbloc
         nvdwlocnl = bead%nvdwlocnl
         nvdwblocloop = bead%nvdwblocloop
         nvdwlocnlb = bead%nvdwlocnlb
         nvdwlocnlb_pair = bead%nvdwlocnlb_pair
         nvdwlocnlb2_pair = bead%nvdwlocnlb2_pair
         nshortvdwlocnlb2_pair = bead%nshortvdwlocnlb2_pair
-!$acc update device(vdwglob(:),vdwglobnl(:),vdwlocnl(:)) async
+!!!$acc update device(vdwglob(:),vdwglobnl(:),vdwlocnl(:)) async
       endif
 c
 c     BOND
@@ -1749,8 +1883,10 @@ c
       if (use_bond) then
         !write(0,*) "push BOND"
         nbondloc = bead%nbondloc
+!$acc parallel
         bndglob = bead%bndglob
-!$acc update device(bndglob(:)) async
+!$acc end parallel
+!!!$acc update device(bndglob(:)) async
       endif
 c
 c     STRETCH-BEND
@@ -1758,8 +1894,10 @@ c
       if (use_strbnd) then
         !write(0,*) "push STRETCH-BEND"
         nstrbndloc = bead%nstrbndloc
+!$acc parallel
         strbndglob = bead%strbndglob
-!$acc update device(strbndglob(:)) async
+!$acc end parallel
+!!!$acc update device(strbndglob(:)) async
       endif
 c
 c     UREY-BRADLEY
@@ -1767,8 +1905,10 @@ c
       if (use_urey) then
         !write(0,*) "push UREY-BRADLEY"
         nureyloc = bead%nureyloc
+!$acc parallel
         ureyglob = bead%ureyglob
-!$acc update device(ureyglob(:)) async
+!$acc end parallel
+!!!$acc update device(ureyglob(:)) async
       endif
 c
 c     ANGLE-ANGLE
@@ -1776,8 +1916,10 @@ c
       if (use_angang) then
         !write(0,*) "push ANGLE-ANGLE"
         nangangloc = bead%nangangloc
+!$acc parallel
         angangglob = bead%angangglob
-!$acc update device(angangglob(:)) async
+!$acc end parallel
+!!!$acc update device(angangglob(:)) async
       endif
 c
 c     OP-BENDING
@@ -1785,8 +1927,10 @@ c
       if (use_opbend) then
         !write(0,*) "push OP-BENDING"
         nopbendloc = bead%nopbendloc
+!$acc parallel
         opbendglob = bead%opbendglob
-!$acc update device(opbendglob(:)) async
+!$acc end parallel
+!!!$acc update device(opbendglob(:)) async
       endif
 c
 c     OP-DIST
@@ -1794,8 +1938,10 @@ c
       if (use_opdist) then
         !write(0,*) "push  OP-DIST"
         nopdistloc = bead%nopdistloc
+!$acc parallel
         opdistglob = bead%opdistglob
-!$acc update device(opdistglob(:)) async
+!$acc end parallel
+!!!$acc update device(opdistglob(:)) async
       endif
 c
 c     IMPROP
@@ -1803,8 +1949,10 @@ c
       if (use_improp) then
        ! write(0,*) "push IMPROP"
         niproploc = bead%niproploc
+!$acc parallel
         impropglob = bead%impropglob
-!$acc update device(impropglob(:)) async
+!$acc end parallel
+!!!$acc update device(impropglob(:)) async
       endif
 c
 c     IMPTOR
@@ -1812,8 +1960,10 @@ c
       if (use_imptor) then
        ! write(0,*) "push IMPTOR"
         nitorsloc = bead%nitorsloc
+!$acc parallel
         imptorglob = bead%imptorglob
-!$acc update device(imptorglob(:)) async
+!$acc end parallel
+!!!$acc update device(imptorglob(:)) async
       endif
 c
 c     TORSION
@@ -1821,8 +1971,10 @@ c
       if (use_tors) then
         !write(0,*) "push TORSION"
         ntorsloc = bead%ntorsloc
+!$acc parallel
         torsglob = bead%torsglob
-!$acc update device(torsglob(:)) async
+!$acc end parallel
+!!!$acc update device(torsglob(:)) async
       endif
 c
 c     PITORSION
@@ -1830,8 +1982,10 @@ c
       if (use_pitors) then
         !write(0,*) "push PITORSION"
         npitorsloc = bead%npitorsloc
+!$acc parallel
         pitorsglob = bead%pitorsglob
-!$acc update device(pitorsglob(:)) async
+!$acc end parallel
+!!!$acc update device(pitorsglob(:)) async
       endif
 c
 c     STRETCH-TORSION
@@ -1839,8 +1993,10 @@ c
       if (use_strtor) then
         !write(0,*) "push STRETCH-TORSION"
         nstrtorloc = bead%nstrtorloc
+!$acc parallel
         strtorglob = bead%strtorglob
-!$acc update device(strtorglob(:)) async
+!$acc end parallel
+!!!$acc update device(strtorglob(:)) async
       endif
 c
 c     TORSION-TORSION
@@ -1848,8 +2004,10 @@ c
       if (use_tortor) then
         !write(0,*) "push TORSION-TORSION"
         ntortorloc = bead%ntortorloc
+!$acc parallel
         tortorglob = bead%tortorglob
-!$acc update device(tortorglob(:)) async
+!$acc end parallel
+!!!$acc update device(tortorglob(:)) async
       endif
 c
 c     ANGLE
@@ -1857,8 +2015,10 @@ c
       if (use_angle) then
         !write(0,*) "push ANGLE"
         nangleloc = bead%nangleloc
+!$acc parallel
         angleglob = bead%angleglob
-!$acc update device(angleglob(:)) async
+!$acc end parallel
+!!!$acc update device(angleglob(:)) async
       endif
 c
 c     CHARGE
@@ -1866,10 +2026,7 @@ c
       if (use_charge) then
         !write(0,*) "push CHARGE"
         nionrecloc = bead%nionrecloc
-        chgrecglob = bead%chgrecglob
         nionloc = bead%nionloc
-        chgglob = bead%chgglob
-        chgglobnl = bead%chgglobnl
         nionlocnl = bead%nionlocnl
         nionlocloop = bead%nionlocloop
         nionlocnlloop=bead%nionlocnlloop
@@ -1877,8 +2034,13 @@ c
         nionlocnlb_pair = bead%nionlocnlb_pair
         nionlocnlb2_pair = bead%nionlocnlb2_pair
         nshortionlocnlb2_pair = bead%nshortionlocnlb2_pair
+!$acc parallel
+        chgrecglob = bead%chgrecglob
+        chgglob = bead%chgglob
+        chgglobnl = bead%chgglobnl
+!$acc end parallel
       
-!$acc update device(chgrecglob(:),chgglob(:),chgglobnl(:)) async
+!!!$acc update device(chgrecglob(:),chgglob(:),chgglobnl(:)) async
       endif
 
 c
@@ -1886,20 +2048,9 @@ c     MULTIPOLE
 c
       if (use_mpole) then
         !write(0,*) "push MULTIPOLE"
-        npolerecloc = bead%npolerecloc
-        if(nlocrec>0) then
-          polerecglob = bead%polerecglob(1:nlocrec)
-!$acc update device(polerecglob(:)) async
-        endif
+        npolerecloc = bead%npolerecloc        
         npoleloc = bead%npoleloc
         npolebloc = bead%npolebloc
-        poleglob = bead%poleglob(1:nbloc)
-        poleloc = bead%poleloc
-        polelocnl = bead%polelocnl
-        if(nlocnl>0) then
-          poleglobnl = bead%poleglobnl(1:nlocnl)
-!$acc update device(poleglobnl(:)) async
-        endif
         npolelocnl = bead%npolelocnl
         npolelocnlb = bead%npolelocnlb
         npolelocnlb_pair = bead%npolelocnlb_pair
@@ -1910,8 +2061,23 @@ c
         npolelocnlloop = bead%npolelocnlloop
         npoleblocloop = bead%npoleblocloop
         npolereclocloop = bead%npolereclocloop
+!$acc parallel copyin(nlocrec,nbloc,nlocnl)
+        poleglob = bead%poleglob(1:nbloc)
+        poleloc = bead%poleloc
+        polelocnl = bead%polelocnl     
+        polerecloc = bead%polerecloc   
+        if(nlocrec>0) then
+          polerecglob = bead%polerecglob(1:nlocrec)
+!!!$acc update device(polerecglob(:)) async
+        endif
+        if(nlocnl>0) then
+          poleglobnl = bead%poleglobnl(1:nlocnl)
+!!!$acc update device(poleglobnl(:)) async
+        endif
+!$acc end parallel
 
-!$acc update device(poleglob(:),poleloc(:),polelocnl(:)) async
+!!!$acc update device(poleglob(:),poleloc(:),polelocnl(:)) async
+!!!$acc update device(poleglobnl(:),polerecglob(:)) async
       endif
 c
 c     POLARIZATION
@@ -1919,13 +2085,17 @@ c
       if (use_polar) then
         !write(0,*) "push POLARIZATION"
         nualt = bead%nualt
+!$acc parallel
         udalt = bead%udalt
         upalt = bead%upalt
         uind = bead%uind
         uinp = bead%uinp
-!$acc update device(udalt(:,:,:),upalt(:,:,:)) async
-!$acc update device(uind(:,:),uinp(:,:)) async
+!$acc end parallel
+!!!$acc update device(udalt(:,:,:),upalt(:,:,:)) async
+!!!$acc update device(uind(:,:),uinp(:,:)) async
       endif
+
+!$acc end data
 
       !NEIGHBORLIST
 
