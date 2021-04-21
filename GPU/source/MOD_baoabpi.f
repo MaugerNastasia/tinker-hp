@@ -166,7 +166,6 @@ c
       !  allocate(veltmp(nbeads,3,n))
       !endif
 
-      print *, nbeads*3*n*8
       dt2=0.5_re_p*dt
 
       if(isobaric) extvolold = extvol
@@ -350,7 +349,7 @@ c         propagate springs (half step)
 
 !$acc wait
 !$acc data present(eigvel,omkpi,noise,mass) 
-!$acc&     copyin(gamma,tau,nbeads,kelvin,boltzmann)
+!$acc&     copyin(gamma,tau,nbeads,kelvin)
 !$acc&     create(gammak,a1,a2)
 c         propagate langevin (full step, TRPMD)
 !$acc parallel loop private(gammak,a1,a2)
