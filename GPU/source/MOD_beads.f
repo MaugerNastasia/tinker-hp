@@ -599,8 +599,8 @@ c
       end if
 
       if (use_polar) then
-        allocate(bead%udalt(maxualt,3,n))
-        allocate(bead%upalt(maxualt,3,n))
+        allocate(bead%udalt(3,n,maxualt))
+        allocate(bead%upalt(3,n,maxualt))
         allocate(bead%uind(3,n))
         allocate(bead%uinp(3,n))
       end if
