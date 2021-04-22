@@ -5,6 +5,7 @@ Tinker-HP: High Performance Multi-GPUs Massively Parallel Evolution of Tinker
 <b>This phase-advance GPU version (1.2 ++) is not (yet) an official release of Tinker-HP but is made freely available in link with the COVID-19 HPC community effort.</b>
 
 This work will be part of a larger 2021 Tinker-HP 1.3 official release.
+In addition to GitHub, a GPUs container (quick install!) is available thanks to NVIDIA on the NVIDIA NGC's website: https://ngc.nvidia.com/catalog/containers/hpc:tinkerhp
 
 # Getting started with Tinker-HP
    - Installation Guide
@@ -35,7 +36,7 @@ There is no difference between the use of Tinker-HP and Tinker-HP (GPU version) 
    <B>If you use the code please cite :</B>
    
    Tinker-HP : Accelerating Molecular Dynamics Simulations of Large Complex Systems with Advanced Point Dipole Polarizable Force Fields using GPUs and Multi-GPUs systems.
-O. Adjoua,  L. Lagardère, L.-H. Jolly, Arnaud Durocher, Z. Wang, T. Very, I. Dupays, T. Jaffrelot Inizan, F. Célerse, P. Ren, J. Ponder, J-P. Piquemal, J. Chem. Theory. Comput., 2021, XX, XX, online (Open Access) https://doi.org/10.1021/acs.jctc.0c01164
+O. Adjoua,  L. Lagardère, L.-H. Jolly, Arnaud Durocher, Z. Wang, T. Very, I. Dupays, T. Jaffrelot Inizan, F. Célerse, P. Ren, J. Ponder, J-P. Piquemal, J. Chem. Theory. Comput., 2021, 17 (4), 2034–2053 (Open Access) https://doi.org/10.1021/acs.jctc.0c01164
    
    and 
    
