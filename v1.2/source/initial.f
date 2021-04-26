@@ -17,7 +17,6 @@ c
       subroutine initial
       use atoms
       use bath
-      use beads
       use bound
       use cell
       use deriv
@@ -36,14 +35,12 @@ c
       use mpi
       implicit none
 !$    integer omp_get_num_procs
-      integer ierr,iproc
-      integer, allocatable :: bead_rank(:)
+      integer ierr
       real*8 precise
 c
 c
 c     cores, thread count and options for OpenMP
 c
-      nbeads = 1
       nproc = 1
       nthread = 1
 c     call omp_set_num_threads (nthread)
@@ -174,8 +171,6 @@ c
       use mpi
       implicit none
       integer ierr,iproc
-      integer nprocbeadstemp
-      integer ibead,nbeadstemp,bufbegbeads
 
       integer, allocatable :: bead_rank(:)
 c
@@ -185,13 +180,14 @@ c     not dealing with replicas for now
 c
       bead_rank = 0d0
 c
-      do iproc = 0, nproctot-1
+
+       do iproc = 0, nproctot-1
         rank_beadloc = int(iproc/nproc)
         bead_rank(iproc+1) = rank_beadloc
       end do
-      ncomm = int(nproctot/nproc)
-      if ((ncomm-nproc*nproctot).gt.0) ncomm = ncomm+1
 c
+c        ncomm = int(nproctot/nproc)
+c        if ((ncomm-nproc*nproctot).gt.0) ncomm = ncomm+1
 c      if (bead_rank(ranktot+1).le.(nproctot-1)) 
 c     $  nbeadsloc = int(nbeads/ncomm)
 c
@@ -199,8 +195,8 @@ c      if (ranktot.eq.(nproctot-1)) nbeadsloc = nbeads-
 c     $  (ncomm-1)*int(nbeads/ncomm)
 
 
-      CALL MPI_Comm_split(MPI_COMM_WORLD,bead_rank(ranktot+1),
-     $  ranktot,COMM_TINKER,ierr)
+c      CALL MPI_Comm_split(MPI_COMM_WORLD,bead_rank(ranktot+1),
+c     $  ranktot,COMM_TINKER,ierr)
 
       call MPI_COMM_SIZE(COMM_TINKER,nproc,ierr)
       call MPI_COMM_RANK(COMM_TINKER,rank,ierr)
@@ -208,7 +204,8 @@ c     $  (ncomm-1)*int(nbeads/ncomm)
      $  MPI_INFO_NULL, hostcomm,ierr)
       CALL MPI_Comm_rank(hostcomm,hostrank,ierr)
       deallocate (bead_rank)
-c
+
+
       CALL MPI_Comm_split(MPI_COMM_WORLD,rank,
      $  ranktot,COMM_POLYMER,ierr)
       call MPI_COMM_SIZE(COMM_POLYMER,nproc_polymer,ierr)

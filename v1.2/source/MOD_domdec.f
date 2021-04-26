@@ -118,6 +118,7 @@ c
       implicit none
       integer nxdd,nydd,nzdd
       integer nproctot,ranktot,COMM_TINKER
+      integer :: rank_beadloc
       integer COMM_POLYMER, rank_polymer, nproc_polymer
       integer nproc,rank,rank_bis,nthread,nrec,ndir,comm_rec,comm_dir
       integer hostrank,hostcomm

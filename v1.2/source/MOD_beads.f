@@ -121,7 +121,7 @@ c
       integer :: ibead_loaded_loc,ibead_loaded_glob
       integer :: nbeads,nbeadsloc,nprocbeads    
 
-      integer :: rank_beadloc, ncomm  
+      integer :: ncomm  
 
       logical :: contract
       integer :: nbeads_ctr, nbeadsloc_ctr  
