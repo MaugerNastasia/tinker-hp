@@ -17,11 +17,14 @@ c     nzdd = number of subdivisions along the z axis
 c
 c     COMM_TINKER local MPI communicator in which a dynamic, analyze, testgrad or minimize run
 c      will take place
+c     COMM_POLYMER mpi communicator for all the beads in each region of space
 c     nproc     number of MPI processes during a dynamic, analyze, testgrad or minimize run
 c     rank      rank of the current MPI process within COMM_TINKER
 c     rank_bis  rank of the current MPI process within comm_dir or comm_rec
+c     rank_polymer   rank of the current MPI process within COMM_POLYMER
 c     nrec      number of processes assigned to the computation of reciprocal space contribution
 c     ndir      number of processes assigned to the computation of direct space contribution
+c     nproc_polymer  number of MPI processes treating beads in a region of space (within COMM_POLYMER)
 c     comm_rec  MPI group communicator associated to the reciprocal space
 c     comm_dir  MPI group communicator associated to the direct space
 c     nthread   number of threads to be used with OpenMP
@@ -115,6 +118,7 @@ c
       implicit none
       integer nxdd,nydd,nzdd
       integer nproctot,ranktot,COMM_TINKER
+      integer COMM_POLYMER, rank_polymer, nproc_polymer
       integer nproc,rank,rank_bis,nthread,nrec,ndir,comm_rec,comm_dir
       integer hostrank,hostcomm
       integer n_recep1, n_send1, nrec_recep,nrec_send
