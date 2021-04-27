@@ -180,14 +180,15 @@ c     not dealing with replicas for now
 c
       bead_rank = 0d0
 c
+c        ncomm = int(nproctot/nproc)
+c        if ((ncomm-nproc*nproctot).gt.0) ncomm = ncomm+1
+c
 
        do iproc = 0, nproctot-1
         rank_beadloc = int(iproc/nproc)
         bead_rank(iproc+1) = rank_beadloc
       end do
 c
-c        ncomm = int(nproctot/nproc)
-c        if ((ncomm-nproc*nproctot).gt.0) ncomm = ncomm+1
 c      if (bead_rank(ranktot+1).le.(nproctot-1)) 
 c     $  nbeadsloc = int(nbeads/ncomm)
 c
@@ -195,8 +196,8 @@ c      if (ranktot.eq.(nproctot-1)) nbeadsloc = nbeads-
 c     $  (ncomm-1)*int(nbeads/ncomm)
 
 
-c      CALL MPI_Comm_split(MPI_COMM_WORLD,bead_rank(ranktot+1),
-c     $  ranktot,COMM_TINKER,ierr)
+      CALL MPI_Comm_split(MPI_COMM_WORLD,bead_rank(ranktot+1),
+     $  ranktot,COMM_TINKER,ierr)
 
       call MPI_COMM_SIZE(COMM_TINKER,nproc,ierr)
       call MPI_COMM_RANK(COMM_TINKER,rank,ierr)
