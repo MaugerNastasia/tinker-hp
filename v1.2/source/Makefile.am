@@ -13,7 +13,7 @@
 # Declare all the programs
 #
 
-bin_PROGRAMS =
+bin_PROGRAMS=
 bin_PROGRAMS += analyze
 bin_PROGRAMS += bar
 bin_PROGRAMS += dynamic
@@ -213,6 +213,7 @@ libtinkermod_a_SOURCES += MOD_resdue.f
 libtinkermod_a_SOURCES += MOD_ring.f
 libtinkermod_a_SOURCES += MOD_scales.f
 libtinkermod_a_SOURCES += MOD_shunt.f
+libtinkermod_a_SOURCES += MOD_stat_pi.f
 libtinkermod_a_SOURCES += MOD_strbnd.f
 libtinkermod_a_SOURCES += MOD_strtor.f
 libtinkermod_a_SOURCES += MOD_timestat.f
