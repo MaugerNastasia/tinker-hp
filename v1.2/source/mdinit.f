@@ -290,7 +290,7 @@ c
             allocate(vad(3,n,nseg))
       endif
         
-      if ((rank.eq.0).and.(adaptive)) then
+      if (adaptive) then
         integrate='QTB'
         write(*,*) 'Using adQTB with adaptive gamma coefficients'
         write(*,*) 'a_gamma=', a_gamma

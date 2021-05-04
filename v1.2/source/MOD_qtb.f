@@ -22,6 +22,7 @@ c
       integer :: nseg,nad
       integer compteur, skipseg, startsavespec
       integer, allocatable :: repartnoise(:)
+      integer winnoise
       real*8 omegacut
       real*8 domega
       real*8 omegasmear

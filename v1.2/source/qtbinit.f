@@ -56,6 +56,7 @@ c      real*8, allocatable :: Htilde(:,:)
 c
 c     perform dynamic allocation of some pointer arrays
 c
+
       call alloc_shared_qtb
 
       if (allocated(rt)) deallocate (rt)
@@ -228,17 +229,22 @@ c
       use qtb
       use mpi
       implicit none
-      integer :: win,win2
       INTEGER(KIND=MPI_ADDRESS_KIND) :: windowsize
-      INTEGER :: disp_unit,ierr,total
+      INTEGER :: disp_unit,ierr
       TYPE(C_PTR) :: baseptr
       integer :: arrayshape(3)
+
 c
-      if (associated(noise)) deallocate(noise)
+CKL      if (associated(noise)) deallocate(noise)
 c      if (associated(rt)) deallocate(rt)
 c      if (associated(vad)) deallocate(vad)
 c      if (associated(fad)) deallocate(fad)
 c
+      if(associated(noise)) then
+        CALL MPI_Win_shared_query(winnoise, 0, windowsize, disp_unit,
+     $  baseptr, ierr)
+        CALL MPI_Win_free(winnoise,ierr)
+      end if
 c     noise
 c
       arrayshape=(/3,n,3*nseg/)
@@ -252,9 +258,9 @@ c
 c    allocation
 c
       CALL MPI_Win_allocate_shared(windowsize, disp_unit, MPI_INFO_NULL,
-     $  hostcomm, baseptr, win, ierr)
+     $  hostcomm, baseptr, winnoise, ierr)
       if (hostrank /= 0) then
-        CALL MPI_Win_shared_query(win, 0, windowsize, disp_unit,
+        CALL MPI_Win_shared_query(winnoise, 0, windowsize, disp_unit,
      $  baseptr, ierr)
       end if
 c
