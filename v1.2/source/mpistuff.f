@@ -1114,7 +1114,7 @@ c
 c
 c     reorder indexes accordingly and build local repart array
 c
-      repart = 0
+      repart =-1
 c
 c     remove atoms that left the domain 
 c
