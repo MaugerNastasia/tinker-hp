@@ -18,6 +18,7 @@ bin_PROGRAMS += analyze
 bin_PROGRAMS += bar
 bin_PROGRAMS += dynamic
 bin_PROGRAMS += minimize
+bin_PROGRAMS += pimd
 bin_PROGRAMS += testgrad
 
 #############################################
@@ -43,6 +44,9 @@ dynamic_DEPENDENCIES  = libtinkermod.a libtinkercalc.a
 
 minimize_SOURCES      = minimize.f
 minimize_DEPENDENCIES = libtinkermod.a libtinkercalc.a
+
+pimd_SOURCES      = pimd.f
+pimd_DEPENDENCIES = libtinkermod.a libtinkercalc.a
 
 testgrad_SOURCES      = testgrad.f
 testgrad_DEPENDENCIES = libtinkermod.a libtinkercalc.a
@@ -131,7 +135,9 @@ libtinkermod_a_SOURCES += MOD_ascii.f
 libtinkermod_a_SOURCES += MOD_atmlst.f
 libtinkermod_a_SOURCES += MOD_atmtyp.f
 libtinkermod_a_SOURCES += MOD_atoms.f
+libtinkermod_a_SOURCES += MOD_baoabpi.f
 libtinkermod_a_SOURCES += MOD_bath.f
+libtinkermod_a_SOURCES += MOD_beads.f
 libtinkermod_a_SOURCES += MOD_bitor.f
 libtinkermod_a_SOURCES += MOD_bndpot.f
 libtinkermod_a_SOURCES += MOD_bond.f
@@ -402,9 +408,12 @@ libtinkercalc_a_SOURCES += lbfgs.f
 libtinkercalc_a_SOURCES += linalg.f
 libtinkercalc_a_SOURCES += maxwell.f
 libtinkercalc_a_SOURCES += mdinit.f
+libtinkercalc_a_SOURCES += mdinitbead.f
 libtinkercalc_a_SOURCES += mdrest.f
 libtinkercalc_a_SOURCES += mdsave.f
+libtinkercalc_a_SOURCES += mdsavebeads.f
 libtinkercalc_a_SOURCES += mdstat.f
+libtinkercalc_a_SOURCES += mdstatpi.f
 libtinkercalc_a_SOURCES += mechanic.f
 libtinkercalc_a_SOURCES += molecule.f
 libtinkercalc_a_SOURCES += mpistuff.f
@@ -428,6 +437,7 @@ libtinkercalc_a_SOURCES += prmkey.f
 libtinkercalc_a_SOURCES += promo.f
 libtinkercalc_a_SOURCES += promosmd.f
 libtinkercalc_a_SOURCES += prtdyn.f
+libtinkercalc_a_SOURCES += prtdynbeads.f
 libtinkercalc_a_SOURCES += prtxyz.f
 libtinkercalc_a_SOURCES += qtbinit.f
 libtinkercalc_a_SOURCES += qtbrandom.f

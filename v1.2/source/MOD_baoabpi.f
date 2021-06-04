@@ -26,6 +26,47 @@ c
 
       contains
 
+c       subroutine baoabpi1 (istep,dt)
+c       use atmtyp
+c       use atoms
+c       use bath
+c       use cutoff
+c       use domdec
+c       use energi
+c       use freeze
+c       use langevin
+c       use mdstuf
+c       use moldyn
+c       use timestat
+c       use units
+c       use usage
+c       use mpi
+c       implicit none
+c       integer, intent(in) :: istep
+c       real*8, intent(in) :: dt
+c       integer i,j,iglob,ibead
+c       real*8 dt_x,factor
+c       real*8 etot,eksum,epot
+c       real*8 temp,pres
+c       real*8 part1,part2
+c       real*8 a1,a2,normal
+c       real*8 ekin(3,3)
+c       real*8 stress(3,3)
+c       real*8 time0,time1
+c c
+c c
+c c     find quarter step velocities via BAOAB recursion
+c c
+c       do i = 1, nloc
+c          iglob = glob(i)
+c          if (use(iglob)) then
+c             do j = 1, 3
+c                v(j,iglob) = v(j,iglob) + 0.5*dt*a(j,iglob)
+c             end do
+c          end if
+c       end do
+
+c       end subroutine baoabpi1
 
       subroutine apply_b_pi (istep,dt)
       use atmtyp
@@ -96,7 +137,7 @@ c      write(*,*) 'x 1 = ',x(1),y(1),v(1,1),a(1,1)
 
       end subroutine apply_b_pi
 
-
+c
 c     !subroutine commposbead: communicate all positions to global master to be able
 c     to make normal mode transformation and propagation,
 c     then communicate back the positions after NM propagation
@@ -214,6 +255,10 @@ c         transform back to coordinates
       !mpitime2=mpi_wtime()
       !time_com=time_com+mpitime2-mpitime1
 
+c      if (ranktot.eq.0) then
+c            write(*,*) 'Time spent in com', time_com
+c            write(*,*) 'Time spent in propagation', time_tot
+c      endif
       end subroutine apply_aoa_pi
 
 
@@ -262,7 +307,7 @@ c         propagate springs (half step)
       end subroutine apply_a_pi
 
       subroutine apply_o_pi(eigpos,eigvel,tau)
-        use atmtyp 
+        use atmtyp
         use atoms
         use units
         use beads

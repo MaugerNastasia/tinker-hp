@@ -163,48 +163,37 @@ c
 c
 c     subroutine initmpi
 c
-c     initialize local communicator and generate replicas if necessary
-c
       subroutine initmpi
+      use beads
       use domdec
       use mpi
       implicit none
-      integer ierr,iproc,rank_beadloc
+      integer ierr,iproc,nprocbeadstemp
+      integer ibead,nbeadstemp,bufbegbeads
 
-      integer, allocatable :: bead_rank(:)
-c
-      allocate (bead_rank(nproctot))
-c
-c     not dealing with replicas for now
-c
-      bead_rank = 0d0
-c
-c
+      rank_beadloc = int(ranktot/nproc)
+      ncomm = int(nproctot/nproc)
+      if ((ncomm-nproc*nproctot).gt.0) ncomm = ncomm+1
+c      write(*,*) 'ncomm 2= ',ncomm
 
-       do iproc = 0, nproctot-1
-        rank_beadloc = int(iproc/nproc)
-        bead_rank(iproc+1) = rank_beadloc
-      end do
-
-c      ncomm = int(nproctot/nproc)
-c      if ((ncomm-nproc*nproctot).gt.0) ncomm = ncomm+1
-c
-c      if (bead_rank(ranktot+1).le.(nproctot-1)) 
-c     $  nbeadsloc = int(nbeads/ncomm)
-c
-c      if (ranktot.eq.(nproctot-1)) nbeadsloc = nbeads-
-c     $  (ncomm-1)*int(nbeads/ncomm)
-
-
-      CALL MPI_Comm_split(MPI_COMM_WORLD,bead_rank(ranktot+1),
+      CALL MPI_Comm_split(MPI_COMM_WORLD,rank_beadloc,
      $  ranktot,COMM_TINKER,ierr)
 
       call MPI_COMM_SIZE(COMM_TINKER,nproc,ierr)
       call MPI_COMM_RANK(COMM_TINKER,rank,ierr)
       CALL MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
      $  MPI_INFO_NULL, hostcomm,ierr)
+c      CALL MPI_Comm_split_type(COMM_TINKER, MPI_COMM_TYPE_SHARED, 0,
+c     $  MPI_INFO_NULL, hostcomm,ierr)
       CALL MPI_Comm_rank(hostcomm,hostrank,ierr)
-      deallocate (bead_rank)
+c      write(*,*) 'RANKTOT = ',ranktot,'rank = ',rank
+c
+
+      CALL MPI_Comm_split(MPI_COMM_WORLD,rank,
+     $  ranktot,COMM_POLYMER,ierr)
+      call MPI_COMM_SIZE(COMM_POLYMER,nproc_polymer,ierr)
+      call MPI_COMM_RANK(COMM_POLYMER,rank_polymer,ierr)
+
 
       return
       end

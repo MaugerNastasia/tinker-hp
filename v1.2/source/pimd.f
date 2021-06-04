@@ -25,7 +25,7 @@ c      call MPI_INIT(ierr)
       call MPI_BARRIER(MPI_COMM_WORLD,ierr)
       call MPI_FINALIZE(ierr)
       end
-
+c
       subroutine pimd_bis
       use atoms
       use bath
@@ -558,8 +558,51 @@ c       BROADCAST polymer info from ranktot 0 to everyone else
 
         call deallocate_polymer(polymer)
 
-      end subroutine
+
+c        if(contract) then
+c          call gather_polymer(polymer,beadsloc,.TRUE.,.TRUE.,.TRUE.)
+c          call get_polymer_info(polymer_ctr,beadsloc_ctr,.TRUE.,.TRUE.)
 c
+c          if (ranktot.eq.0) then
+c            call contract_polymer(polymer,polymer_ctr)
+c          endif
+c          
+c            call broadcast_polymer(polymer_ctr,beadsloc,.TRUE.,.TRUE.
+c     &              ,.FALSE.)
+c            if(allocated(polymer%pos)) deallocate(polymer%pos)
+c            if(allocated(polymer%vel)) deallocate(polymer%vel)
+c            do ibead = 1, nbeadsloc_ctr
+c              call pushbead(istep,beadsloc_ctr(ibead),
+c     &              skip_parameters_copy)
+c               call prepare_loaded_bead(istep)
+c               call resize_nl_arrays_bead(istep,beadsloc(ibead)) 
+c               allocate (derivs(3,nbloc))
+c               derivs = 0d0
+c               call gradslow(einter,derivs)
+c               call transfer_Msites_forces(derivs)
+c               
+c              
+c            
+c            
+c        ! avoid memory leaks (should be automatic but better safe than sorry !)
+c          call deallocate_polymer(polymer_ctr)
+c        endif
+
+        ! STEP DONE
+
+        !write(0,*) "ranktot",ranktot,"step done"
+c        if(ranktot.eq.0) then
+c            write(*,*) 'Time pushbeads etc ', timebeads
+c            write(*,*) 'Time pushbead ', timepush
+c            write(*,*) 'Time reassigpi etc ', timereass
+c            write(*,*) 'Time initbead etc ', timeinit
+c            write(*,*) 'Time baoab 2 (gradient)  ', timebaoab2
+c            write(*,*) 'Time dedv ', timededvcalc
+c            write(*,*) 'Time aoa ', timeaoa
+c      endif
+
+      end subroutine
+
       subroutine initialize_pimd_contractions()
         use atoms
         use bath
@@ -646,6 +689,8 @@ c
         
         if(ranktot.eq.0) then
           write(*,*) "initialize_pimd_contractions done."
+        !  write(0,*) "Error: PIMD contractions not implemented yet !"
+        !  call fatal
         endif
 
       end subroutine initialize_pimd_contractions
@@ -682,6 +727,14 @@ c
           polymer_ctr%pos(j,i,:)=matmul(contractor_mat
      &                    ,polymer%pos(j,i,:))
         ENDDO ; ENDDO        
+
+        !do k=1,nbeads_ctr
+        !  do i=1,n
+        !    write(17+k,*) i,polymer_ctr%pos(:,i,k)
+        !  enddo
+        !  FLUSH(17+k)
+        !enddo
+        !call fatal
 
       end subroutine contract_polymer
 

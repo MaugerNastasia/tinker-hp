@@ -235,16 +235,16 @@ c
       integer :: arrayshape(3)
 
 c
-CKL      if (associated(noise)) deallocate(noise)
+      if (associated(noise)) deallocate(noise)
 c      if (associated(rt)) deallocate(rt)
 c      if (associated(vad)) deallocate(vad)
 c      if (associated(fad)) deallocate(fad)
 c
-      if(associated(noise)) then
-        CALL MPI_Win_shared_query(winnoise, 0, windowsize, disp_unit,
-     $  baseptr, ierr)
-        CALL MPI_Win_free(winnoise,ierr)
-      end if
+c      if(associated(noise)) then
+c        CALL MPI_Win_shared_query(winnoise, 0, windowsize, disp_unit,
+c     $  baseptr, ierr)
+c        CALL MPI_Win_free(winnoise,ierr)
+c      end if
 c     noise
 c
       arrayshape=(/3,n,3*nseg/)

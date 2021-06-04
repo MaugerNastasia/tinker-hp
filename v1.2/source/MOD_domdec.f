@@ -117,7 +117,9 @@ c
       module domdec
       implicit none
       integer nxdd,nydd,nzdd
+      integer ncomm
       integer nproctot,ranktot,COMM_TINKER
+      integer COMM_POLYMER, rank_polymer, nproc_polymer
       integer nproc,rank,rank_bis,nthread,nrec,ndir,comm_rec,comm_dir
       integer hostrank,hostcomm
       integer n_recep1, n_send1, nrec_recep,nrec_send

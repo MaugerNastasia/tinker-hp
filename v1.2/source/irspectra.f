@@ -39,7 +39,8 @@ c     subroutine irspectra: get the total dipole moment of the system (permanent
       implicit none
       integer i,j,l,istep,ierr
       integer iglob,iipole,iichg
-c      integer iloc3,iloc2,iloc1
+      integer iloc
+      integer iloc3,iloc2,iloc1
       integer imolcul,jglob,k
       real*8 oterm,hterm,q,beta_planck
       real*8, allocatable ::  vtot(:,:,:)
@@ -71,17 +72,17 @@ c      integer iloc3,iloc2,iloc1
       endif
 
       open(12,file='IR_spectra_decomposed.out')
-      open(13,file='IR_spectra_test.out')
+      open(13,file='IR_spectra.out')
       
       
       do i=1,nloc
         iglob=glob(i)
         imolcul = molcule(iglob) 
-        do k = imol(1,imolcul),imol(2,imolcul)
-          jglob = kmol(k)
-          if ((jglob.lt.1).or.(jglob.gt.nloc)) goto 10
-        end do
-
+c        do k = imol(1,imolcul),imol(2,imolcul)
+c          jglob = kmol(k)
+c          if ((jglob.lt.1).or.(jglob.gt.nloc)) goto 10
+c        end do
+c
 c        iloc3 = loc(iglob-3)
 c        iloc2 = loc(iglob-2)
 c        iloc1 = loc(iglob-1)
@@ -94,13 +95,13 @@ c     &                        ,:)+hterm*vad(2,iloc1,:)
 c              vtot(3,i,:)=oterm*vad(3,iloc3,:)+hterm*vad(3,iloc2
 c     &                        ,:)+hterm*vad(3,iloc1,:) 
 c           enddo
-          if (use(iglob)) then 
-            vtot(:,i,:)=vad(:,i,:)
-c            vtot(1,i,:)=vad(1,i,:)
-c            vtot(2,i,:)=vad(2,i,:)
-c            vtot(3,i,:)=vad(3,i,:)
+c          else if (use(iglob)) then 
+           if (use(iglob)) then 
+            vtot(1,i,:)=vad(1,i,:)
+            vtot(2,i,:)=vad(2,i,:)
+            vtot(3,i,:)=vad(3,i,:)
           endif
-  10      continue
+c  10      continue
       enddo
 
 
@@ -108,18 +109,20 @@ c            vtot(3,i,:)=vad(3,i,:)
           do i= 1, npoleloc
             iipole = poleglob(i)
             iglob = ipole(iipole)
+            iloc=loc(iglob)
             q=rpole(1,iipole)
               do j=1,3
-                mudot(j,:)=mudot(j,:)+q*(vtot(j,i,:))
+                mudot(j,:)=mudot(j,:)+q*(vtot(j,iloc,:))
               enddo
             enddo
         else if (use_charge) then
           do i = 1, nionloc
             iichg = chgglob(i)
             iglob = iion(iichg)
+            iloc=loc(iglob)
             q = pchg(iichg)
               do j=1,3
-                mudot(j,:)=mudot(j,:)+q*(vtot(j,i,:))
+                mudot(j,:)=mudot(j,:)+q*(vtot(j,iloc,:))
               enddo
           enddo
         endif

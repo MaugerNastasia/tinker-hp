@@ -121,7 +121,7 @@ c
       integer :: ibead_loaded_loc,ibead_loaded_glob
       integer :: nbeads,nbeadsloc,nprocbeads    
 
-      integer :: ncomm  
+      integer :: rank_beadloc  
 
       logical :: contract
       integer :: nbeads_ctr, nbeadsloc_ctr  
@@ -663,12 +663,11 @@ c
       implicit none
       integer, intent(in) :: istep
       integer :: nblocrec
-      integer, allocatable :: locnl(:)
-      integer, allocatable :: globrec1(:), locrec1(:)
+      integer, allocatable :: globrec1(:), locrec1(:), locnl(:)
       type(BEAD_TYPE), intent(inout) :: bead 
       logical,intent(in) :: skip_parameters
       integer ibead,i,modnl
-      real*8 :: timestep
+      real*8 ::  timestep
 
 c
 c     positions, speed, mass
@@ -992,8 +991,7 @@ c
       implicit none
       integer, intent(in) :: istep
       integer :: nblocrec
-      integer, allocatable :: locnl(:)
-      integer, allocatable :: globrec1(:), locrec1(:)
+      integer, allocatable :: globrec1(:), locrec1(:), locnl(:)
       type(BEAD_TYPE), intent(inout) :: bead
       LOGICAL, intent(in) :: skip_parameters
       integer modnl
@@ -1113,6 +1111,7 @@ c
 c     ANGLE-ANGLE
 c
       if (use_angang) then
+        !write(0,*) "push ANGLE-ANGLE"
         nangangloc = bead%nangangloc
         angangglob = bead%angangglob
       endif
@@ -1120,6 +1119,7 @@ c
 c     OP-BENDING
 c
       if (use_opbend) then
+        !write(0,*) "push OP-BENDING"
         nopbendloc = bead%nopbendloc
         opbendglob = bead%opbendglob
       endif
@@ -1127,6 +1127,7 @@ c
 c     OP-DIST
 c
       if (use_opdist) then
+        !write(0,*) "push  OP-DIST"
         nopdistloc = bead%nopdistloc
         opdistglob = bead%opdistglob
       endif
@@ -1134,6 +1135,7 @@ c
 c     IMPROP
 c
       if (use_improp) then
+       ! write(0,*) "push IMPROP"
         niproploc = bead%niproploc
         impropglob = bead%impropglob
       endif
@@ -1141,6 +1143,7 @@ c
 c     IMPTOR
 c
       if (use_imptor) then
+       ! write(0,*) "push IMPTOR"
         nitorsloc = bead%nitorsloc
         imptorglob = bead%imptorglob
       endif
@@ -1148,6 +1151,7 @@ c
 c     TORSION
 c
       if (use_tors) then
+        !write(0,*) "push TORSION"
         ntorsloc = bead%ntorsloc
         torsglob = bead%torsglob
       endif
@@ -1155,6 +1159,7 @@ c
 c     PITORSION
 c
       if (use_pitors) then
+        !write(0,*) "push PITORSION"
         npitorsloc = bead%npitorsloc
         pitorsglob = bead%pitorsglob
       endif
@@ -1162,6 +1167,7 @@ c
 c     STRETCH-TORSION
 c
       if (use_strtor) then
+        !write(0,*) "push STRETCH-TORSION"
         nstrtorloc = bead%nstrtorloc
         strtorglob = bead%strtorglob
       endif
@@ -1169,6 +1175,7 @@ c
 c     TORSION-TORSION
 c
       if (use_tortor) then
+        !write(0,*) "push TORSION-TORSION"
         ntortorloc = bead%ntortorloc
         tortorglob = bead%tortorglob
       endif
@@ -1176,6 +1183,7 @@ c
 c     ANGLE
 c
       if (use_angle) then
+        !write(0,*) "push ANGLE"
         nangleloc = bead%nangleloc
         angleglob = bead%angleglob
       endif
@@ -1183,6 +1191,7 @@ c
 c     CHARGE
 c
       if (use_charge) then
+        !write(0,*) "push CHARGE"
         nionrecloc = bead%nionrecloc
         chgrecglob = bead%chgrecglob
         nionloc = bead%nionloc
@@ -1198,6 +1207,7 @@ c
 c     MULTIPOLE
 c
       if (use_mpole) then
+        !write(0,*) "push MULTIPOLE"
         npolerecloc = bead%npolerecloc
         polerecglob = bead%polerecglob
         npoleloc = bead%npoleloc
@@ -1211,6 +1221,7 @@ c
 c     POLARIZATION
 c
       if (use_polar) then
+        !write(0,*) "push POLARIZATION"
         nualt = bead%nualt
         udalt = bead%udalt
         upalt = bead%upalt
@@ -1222,152 +1233,11 @@ c     TIME
 c 
       timestep = bead%timestep
 
+      ! write(0,*) "pushbead done"
 
       end subroutine pushbead
 
 
-      subroutine compute_observables_pi(pos,vel,forces,istep,dt)
-      use atoms
-      use units
-      use atmtyp
-      use math
-      use boxes
-      use mdstuf
-      use bath
-      use mpi
-      use domdec
-      use qtb
-      IMPLICIT NONE
-      real*8, intent(in),allocatable :: pos(:,:,:),vel(:,:,:)
-     &                                   ,forces(:,:,:)
-      real*8, intent(in) :: dt
-      integer, intent(in) :: istep
-      real*8, allocatable :: centroid(:,:),vel_centroid(:,:)
-      real*8 :: omp,omp2,dedv_mean
-      integer :: ibead,i,j,k,ierr
-      real*8 :: buffer_energy(4)
-
-c
-c     reduce potential and kinetic energies
-c
-      buffer_energy=0
-      DO ibead=1,nbeadsloc        
-        buffer_energy(1)=buffer_energy(1) + beadsloc(ibead)%eksum
-        buffer_energy(2)=buffer_energy(2) + beadsloc(ibead)%dedv
-        if(contract) then
-          buffer_energy(3)=buffer_energy(3) + beadsloc(ibead)%eintra
-        else
-          buffer_energy(3)=buffer_energy(3) + beadsloc(ibead)%epot
-        endif
-      ENDDO
-
-      if(contract) then
-        DO ibead=1,nbeadsloc_ctr
-          buffer_energy(4)=buffer_energy(4) + beadsloc_ctr(ibead)%einter
-        ENDDO
-      endif
-
-      if ((ranktot.eq.0).and.(contract)) then
-         call MPI_REDUCE(MPI_IN_PLACE,buffer_energy,4,MPI_REAL8
-     $      ,MPI_SUM,0,MPI_COMM_WORLD,ierr)
-         eksumpi_loc=buffer_energy(1)/(nbeads*nproc)
-         dedv_mean=buffer_energy(2)/(nbeads*nproc)
-         eintrapi_loc=buffer_energy(3)/(nbeads*nproc)
-         einterpi_loc=buffer_energy(4)/(nbeads_ctr*nproc)
-         epotpi_loc =  eintrapi_loc +  einterpi_loc
-      else if ((ranktot.eq.0).and.(contract.eqv..false.)) then
-         call MPI_REDUCE(MPI_IN_PLACE,buffer_energy,3,MPI_REAL8
-     $      ,MPI_SUM,0,MPI_COMM_WORLD,ierr)         
-         eksumpi_loc=buffer_energy(1)/(nbeads*nproc)
-         dedv_mean=buffer_energy(2)/(nbeads*nproc)
-         epotpi_loc=buffer_energy(3)/(nbeads*nproc)
-      endif
-
-      if((ranktot.ne.0).and.(contract)) then
-          call MPI_REDUCE(buffer_energy,buffer_energy,4,MPI_REAL8
-     $     ,MPI_SUM,0,MPI_COMM_WORLD,ierr)
-      else if ((ranktot.ne.0).and.(contract.eqv..false.)) then
-        call MPI_REDUCE(buffer_energy,buffer_energy,3,MPI_REAL8
-     $     ,MPI_SUM,0,MPI_COMM_WORLD,ierr)
-      end if
-      
-
-      if(ranktot.eq.0) then
-        allocate(centroid(3,n),vel_centroid(3,n))
-        centroid(:,:)=0.d0
-        vel_centroid(:,:)=0.d0
-        DO ibead=1,nbeads
-          DO i=1,n
-            centroid(:,i)=centroid(:,i)+pos(:,i,ibead)
-            vel_centroid(:,i)=vel_centroid(:,i)+vel(:,i,ibead)
-          ENDDO
-        ENDDO  
-        centroid(:,:)=centroid(:,:)/REAL(nbeads)
-        vel_centroid(:,:)=vel_centroid(:,:)/REAL(nbeads) 
-
-        Ekcentroid=0.d0
-        DO i=1,n ; DO j=1,3          
-          Ekcentroid=Ekcentroid+mass(i)*vel_centroid(j,i)**2
-        ENDDO ; ENDDO
-        Ekcentroid=Ekcentroid*nbeads/convert
-
-        if (ir) then
-          k = mod(istep-1,nseg)+1
-          vad(:,:,k)=vel_centroid(:,:)
-          if ((mod(istep,nseg).eq.0)) then
-c              call irspectra_pimd
-              compteur=compteur+1
-          endif
-        endif
-
-        deallocate(vel_centroid)
-
-        omp=nbeads*boltzmann*kelvin/hbar_planck        
-        omp2=omp*omp
-
-c       COMPUTE PRIMITIVE KINETIC ENERGY
-        ekprim=0.d0
-        DO ibead=1,nbeads-1
-          DO i=1,n
-        !    if (atomic(i).eq.0) cycle
-            DO j=1,3
-              ekprim = ekprim - 0.5*mass(i)*omp2
-     &          *(pos(j,i,ibead+1)-pos(j,i,ibead))**2
-            ENDDO
-          ENDDO
-        ENDDO  
-        DO i=1,n
-        ! if (atomic(i).eq.0) cycle
-          DO j=1,3
-            ekprim = ekprim - 0.5*mass(i)*omp2
-     &          *(pos(j,i,nbeads)-pos(j,i,1))**2
-          ENDDO
-        ENDDO  
-        ekprim = (ekprim/nbeads
-     &          + 0.5*nbeads*nfree*boltzmann*kelvin)/convert
-
-c       COMPUTE VIRIAL KINETIC ENERGY
-        ekvir=0.d0
-        DO ibead=1,nbeads
-          DO i=1,n
-        !  if (atomic(i).eq.0) cycle
-            DO j=1,3
-              ekvir=ekvir+(pos(j,i,ibead)-centroid(j,i))
-     &                      *forces(j,i,ibead)
-            ENDDO
-          ENDDO
-        ENDDO
-
-        presvir = prescon*( -dedv_mean + (Ekcentroid
-     &               - ekvir)/(3*nbeads*volbox) )
-
-        ekvir=0.5d0*(nfree*boltzmann*kelvin/convert-ekvir/nbeads)
-        temppi = 2.0d0 * ekvir / (nfree * gasconst)
-        temppi_cl = 2.0d0 * eksumpi_loc / (nfree * gasconst)
-
-      endif
-
-      end subroutine compute_observables_pi
       
       subroutine rescale_box_pi(istep)
 c      rescale the simulation box according to extvol computed by ranktot 0
@@ -1463,6 +1333,7 @@ c
 c      write(*,*) 'x 0 = ',x(1),y(1),v(1,1),a(1,1)
 c      write(*,*) 'istep 1 = ',istep
 
+
       !rebuild the neighbor lists
       if (use_list) call nblist(istep)
           
@@ -1481,6 +1352,7 @@ c      write(*,*) 'istep 1 = ',istep
       type(POLYMER_COMM_TYPE), intent(inout) :: polymer
       type(BEAD_TYPE), intent(in) :: beads(:)
       LOGICAL, intent(in) :: get_nloccomm,get_globbeadcomm 
+      integer, allocatable :: nbeadscomm(:)
       integer i,l,iproc,ibead,ierr,iglob
       integer status(MPI_STATUS_SIZE),tagmpi
       integer, allocatable :: reqrec(:),reqsend(:),buffer(:,:)
@@ -1512,7 +1384,6 @@ c
           call MPI_IRECV(polymer%nbeadscomm(i+1),1,
      $     MPI_INT,i,tagmpi,MPI_COMM_WORLD,reqrec(i),ierr)
           call MPI_WAIT(reqrec(i),status,ierr)
-c          write(*,*) 'nbeads of ',i,' = ',nbeadscomm(i+1)
         end do
        
       else
@@ -1547,7 +1418,6 @@ c
           call MPI_IRECV(buffer,nsend*polymer%nbeadscomm(i+1),
      $     MPI_INT,i,tagmpi,MPI_COMM_WORLD,reqrec(i),ierr)
           call MPI_WAIT(reqrec(i),status,ierr)
-c          write(*,*) 'nloc of ',i,' = ',nloccomm(i+1)
           isend=1
           if(get_nloccomm) then
             polymer%nloccomm(1:polymer%nbeadscomm(i+1),i+1)
@@ -1892,4 +1762,281 @@ c
 
       end subroutine broadcast_polymer
 
+
+      subroutine irspectra_pimd(dt)
+      use atmlst
+      use atmtyp
+      use atoms
+      use bath
+      use boxes
+      use charge
+      use cutoff
+      use domdec
+      use energi
+      use freeze
+      use langevin
+      use math
+      use mdstuf
+      use moldyn
+      use mpole
+      use potent
+      use qtb
+      use adqtb
+      use timestat
+      use usage
+      use units
+      use mpi
+      implicit none
+      integer i,j,l,istep,ierr
+      integer iglob,iipole,iichg
+      real*8 oterm,hterm,q,beta_planck,k_b,dt
+      real*8, allocatable ::  vtot(:,:,:)
+      real*8, allocatable :: Cmumu(:,:)
+      real*8, allocatable ::  mudot(:,:)
+      double complex, allocatable :: s_in(:), s_out(:)
+      integer*8 plan, est,s
+
+      oterm = 0.73612d0
+      hterm = 0.13194d0
+
+      s=3*nseg
+      est=1
+      k_b=boltzmann
+      beta_planck=1./(k_b*kelvin)
+      domega = (2.*pi)/(3.*nseg*dt)
+      nad=int(omegacut/domega)
+
+      allocate(vtot(3,n,nseg))
+      allocate(mudot(3,nseg))
+     
+      allocate(Cmumu(3,0:nad-1))
+
+      Cmumu(:,:)=0d0
+      mudot(:,:)=0d0
+
+      if(compteur.le.startsavespec) then
+        if (allocated(Cmumu_average)) deallocate (Cmumu_average)
+         allocate(Cmumu_average(3,0:nad-1)) 
+        Cmumu_average(:,:)=0d0
+      endif
+
+      open(12,file='IR_spectra_decomposed.out')
+      open(13,file='IR_spectra.out')
+      
+      
+      do i=1,n
+          if (use(i) .and. (atomic(i).eq.0)) then
+            do j=1,3
+              vtot(1,i,:)=oterm*vad(1,i-3,:)+hterm*vad(1,i-2
+     &                        ,:)+hterm*vad(1,i-1,:) 
+              vtot(2,i,:)=oterm*vad(2,i-3,:)+hterm*vad(2,i-2
+     &                        ,:)+hterm*vad(2,i-1,:) 
+              vtot(3,i,:)=oterm*vad(3,i-3,:)+hterm*vad(3,i-2
+     &                        ,:)+hterm*vad(3,i-1,:) 
+           enddo
+          else if (use(i)) then 
+            vtot(1,i,:)=vad(1,i,:)
+            vtot(2,i,:)=vad(2,i,:)
+            vtot(3,i,:)=vad(3,i,:)
+          endif
+      enddo
+
+
+        if (use_mpole) then
+          do i= 1, npole
+            iglob = ipole(i)
+            q=rpole(1,i)
+              do j=1,3
+                mudot(j,:)=mudot(j,:)+q*(vtot(j,iglob,:))
+              enddo
+            enddo
+        else if (use_charge) then
+          do i = 1, nion
+            iglob = iion(i)
+            q = pchg(i)
+              do j=1,3
+                mudot(j,:)=mudot(j,:)+q*(vtot(j,iglob,:))
+              enddo
+          enddo
+        endif
+      
+
+        
+      allocate(s_in(3*nseg))   
+      allocate(s_out(3*nseg))
+
+
+      call dfftw_plan_dft_1d(plan,s,s_in,s_out,1,est)
+        do j=1,3
+          s_in(:)=dcmplx(0d0,0d0)
+          s_in(1:nseg)=dcmplx(mudot(j,:),0d0)
+          call dfftw_execute(plan,s_in,s_out)
+          Cmumu(j,:)=Cmumu(j,:)+abs(s_out(1:nad))**2/nseg
+        enddo
+
+         Cmumu_average=Cmumu_average+Cmumu
+        
+        do i=0,nad-1
+         write(12,'(4e20.5)')domega*i,Cmumu_average(:,i)
+     &                /max(compteur-startsavespec+1,1)
+         write(13,*) domega*i, ((pi*beta_planck)/(3*lightspd*volbox))
+     &                *(Cmumu_average(1,i)
+     &                +Cmumu_average(2,i)
+     &                +Cmumu_average(3,i))
+     &                /max(compteur-startsavespec+1,1)
+        enddo
+      
+      close(12)
+      close(13)
+      
+      call dfftw_destroy_plan(plan) 
+    
+
+
+      return 
+      end subroutine irspectra_pimd
+
+      subroutine compute_observables_pi(pos,vel,forces,istep,dt)
+      use atoms
+      use units
+      use atmtyp
+      use math
+      use boxes
+      use mdstuf
+      use bath
+      use mpi
+      use domdec
+      use qtb
+      IMPLICIT NONE
+      real*8, intent(in),allocatable :: pos(:,:,:),vel(:,:,:)
+     &                                   ,forces(:,:,:)
+      real*8, intent(in) :: dt
+      integer, intent(in) :: istep
+      real*8, allocatable :: centroid(:,:),vel_centroid(:,:)
+      real*8 :: omp,omp2,dedv_mean
+      integer :: ibead,i,j,k,ierr
+      real*8 :: buffer_energy(4)
+
+c
+c     reduce potential and kinetic energies
+c
+      buffer_energy=0
+      DO ibead=1,nbeadsloc        
+        buffer_energy(1)=buffer_energy(1) + beadsloc(ibead)%eksum
+        buffer_energy(2)=buffer_energy(2) + beadsloc(ibead)%dedv
+        if(contract) then
+          buffer_energy(3)=buffer_energy(3) + beadsloc(ibead)%eintra
+        else
+          buffer_energy(3)=buffer_energy(3) + beadsloc(ibead)%epot
+        endif
+      ENDDO
+
+      if(contract) then
+        DO ibead=1,nbeadsloc_ctr
+          buffer_energy(4)=buffer_energy(4) + beadsloc_ctr(ibead)%einter
+        ENDDO
+      endif
+
+      if ((ranktot.eq.0).and.(contract)) then
+         call MPI_REDUCE(MPI_IN_PLACE,buffer_energy,4,MPI_REAL8
+     $      ,MPI_SUM,0,MPI_COMM_WORLD,ierr)
+         eksumpi_loc=buffer_energy(1)/(nbeads*nproc)
+         dedv_mean=buffer_energy(2)/(nbeads*nproc)
+         eintrapi_loc=buffer_energy(3)/(nbeads*nproc)
+         einterpi_loc=buffer_energy(4)/(nbeads_ctr*nproc)
+         epotpi_loc =  eintrapi_loc +  einterpi_loc
+      else if ((ranktot.eq.0).and.(contract.eqv..false.)) then
+         call MPI_REDUCE(MPI_IN_PLACE,buffer_energy,3,MPI_REAL8
+     $      ,MPI_SUM,0,MPI_COMM_WORLD,ierr)         
+         eksumpi_loc=buffer_energy(1)/(nbeads*nproc)
+         dedv_mean=buffer_energy(2)/(nbeads*nproc)
+         epotpi_loc=buffer_energy(3)/(nbeads*nproc)
+      endif
+
+      if((ranktot.ne.0).and.(contract)) then
+          call MPI_REDUCE(buffer_energy,buffer_energy,4,MPI_REAL8
+     $     ,MPI_SUM,0,MPI_COMM_WORLD,ierr)
+      else if ((ranktot.ne.0).and.(contract.eqv..false.)) then
+        call MPI_REDUCE(buffer_energy,buffer_energy,3,MPI_REAL8
+     $     ,MPI_SUM,0,MPI_COMM_WORLD,ierr)
+      end if
+      
+
+      if(ranktot.eq.0) then
+        allocate(centroid(3,n),vel_centroid(3,n))
+        centroid(:,:)=0.d0
+        vel_centroid(:,:)=0.d0
+        DO ibead=1,nbeads
+          DO i=1,n
+            centroid(:,i)=centroid(:,i)+pos(:,i,ibead)
+            vel_centroid(:,i)=vel_centroid(:,i)+vel(:,i,ibead)
+          ENDDO
+        ENDDO  
+        centroid(:,:)=centroid(:,:)/REAL(nbeads)
+        vel_centroid(:,:)=vel_centroid(:,:)/REAL(nbeads) 
+
+        Ekcentroid=0.d0
+        DO i=1,n ; DO j=1,3          
+          Ekcentroid=Ekcentroid+mass(i)*vel_centroid(j,i)**2
+        ENDDO ; ENDDO
+        Ekcentroid=Ekcentroid*nbeads/convert
+
+        if (ir) then
+          k = mod(istep-1,nseg)+1
+          vad(:,:,k)=vel_centroid(:,:)
+          if ((mod(istep,nseg).eq.0)) then
+              call irspectra_pimd(dt)
+              compteur=compteur+1
+          endif
+        endif
+
+        deallocate(vel_centroid)
+
+        omp=nbeads*boltzmann*kelvin/hbar_planck        
+        omp2=omp*omp
+
+c       COMPUTE PRIMITIVE KINETIC ENERGY
+        ekprim=0.d0
+        DO ibead=1,nbeads-1
+          DO i=1,n
+        !    if (atomic(i).eq.0) cycle
+            DO j=1,3
+              ekprim = ekprim - 0.5*mass(i)*omp2
+     &          *(pos(j,i,ibead+1)-pos(j,i,ibead))**2
+            ENDDO
+          ENDDO
+        ENDDO  
+        DO i=1,n
+        ! if (atomic(i).eq.0) cycle
+          DO j=1,3
+            ekprim = ekprim - 0.5*mass(i)*omp2
+     &          *(pos(j,i,nbeads)-pos(j,i,1))**2
+          ENDDO
+        ENDDO  
+        ekprim = (ekprim/nbeads
+     &          + 0.5*nbeads*nfree*boltzmann*kelvin)/convert
+
+c       COMPUTE VIRIAL KINETIC ENERGY
+        ekvir=0.d0
+        DO ibead=1,nbeads
+          DO i=1,n
+        !  if (atomic(i).eq.0) cycle
+            DO j=1,3
+              ekvir=ekvir+(pos(j,i,ibead)-centroid(j,i))
+     &                      *forces(j,i,ibead)
+            ENDDO
+          ENDDO
+        ENDDO
+
+        presvir = prescon*( -dedv_mean + (Ekcentroid
+     &               - ekvir)/(3*nbeads*volbox) )
+
+        ekvir=0.5d0*(nfree*boltzmann*kelvin/convert-ekvir/nbeads)
+        temppi = 2.0d0 * ekvir / (nfree * gasconst)
+        temppi_cl = 2.0d0 * eksumpi_loc / (nfree * gasconst)
+
+      endif
+
+      end subroutine compute_observables_pi
+      
       end module

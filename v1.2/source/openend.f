@@ -22,7 +22,7 @@ c
       subroutine openend (iunit,name)
       implicit none
       integer iunit
-      character*240 name
+      character*120 name
 c
 c
 c     standard Fortran 90, unavailable in some Fortran 77 compilers
@@ -40,10 +40,10 @@ c
 c     manually read to the end of file, slow but always correct
 c
 c     open (unit=iunit,file=name,status='old')
-c     do while (.true.)
-c        read (iunit,10,err=20,end=20)
-c  10    format ()
-c     end do
-c  20 continue
+c        do while (.true.)
+c          read (iunit,10,err=20,end=20)
+c  10      format ()
+c       end do
+c  20  continue
       return
       end
